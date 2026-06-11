@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'all_transactions_screen.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
 import '../models/jar_model.dart';
 import '../services/api_service.dart';
 
@@ -149,8 +151,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 _sheetField(titleCtrl, 'Tên hũ (vd: Tiền ăn)', Icons.label_outline_rounded, isDark, textPrimary),
                 const SizedBox(height: 14),
                 _sheetField(limitCtrl, 'Hạn mức (đ)', Icons.account_balance_wallet_outlined, isDark, textPrimary, inputType: TextInputType.number),
-                const SizedBox(height: 14),
-                _sheetField(spentCtrl, 'Đã chi tiêu (đ)', Icons.payments_outlined, isDark, textPrimary, inputType: TextInputType.number),
                 const SizedBox(height: 18),
                 
                 Text('Biểu tượng', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: textSecondary)),
@@ -208,7 +208,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     onPressed: () async {
                       final title = titleCtrl.text.trim();
                       final limit = double.tryParse(limitCtrl.text.trim()) ?? 0;
-                      final spent = double.tryParse(spentCtrl.text.trim()) ?? 0;
                       if (title.isEmpty) return;
                       Navigator.pop(ctx);
                       
@@ -219,7 +218,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                         await ApiService.createJar(title, limit, '1'); // 1 = Personal
                       } else {
                         // Cập nhật qua API
-                        await ApiService.updateJar(existing.jarId, title, limit, existing.jarType.value.toString());
+                        await ApiService.updateJar(existing.jarId, title, limit, existing.jarType.value);
                       }
                       
                       // Load lại dữ liệu
@@ -236,6 +235,175 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   ),
                 ),
               ],
+            ),
+          ),
+        );
+      }),
+    );
+  }
+
+  /// Dialog CHI TIÊU: nhập mô tả + số tiền + chụp ảnh hóa đơn → tạo Transaction
+  void _showSpendDialog(JarModel jar) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final descCtrl = TextEditingController();
+    final amountCtrl = TextEditingController();
+    File? receiptImage;
+    const accent = Color(0xFF4B49EB);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setS) {
+        final bg = isDark ? const Color(0xFF1E1D2E) : Colors.white;
+        final textPrimary = isDark ? const Color(0xFFE4E1EE) : const Color(0xFF1C1C1E);
+        final textSecondary = isDark ? const Color(0xFF9CA3AF) : Colors.grey;
+
+        Future<void> pickImage(ImageSource source) async {
+          final picker = ImagePicker();
+          final picked = await picker.pickImage(source: source, imageQuality: 75);
+          if (picked != null) setS(() => receiptImage = File(picked.path));
+        }
+
+        return Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+          child: Container(
+            decoration: BoxDecoration(color: bg, borderRadius: const BorderRadius.vertical(top: Radius.circular(28))),
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+            child: SingleChildScrollView(
+              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Center(child: Container(width: 40, height: 4,
+                    decoration: BoxDecoration(color: textSecondary.withValues(alpha: 0.3), borderRadius: BorderRadius.circular(2)))),
+                const SizedBox(height: 18),
+                Row(children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(color: accent.withValues(alpha: 0.12), shape: BoxShape.circle),
+                    child: const Icon(Icons.shopping_bag_outlined, color: accent, size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text('Chi tiêu từ hũ', style: TextStyle(fontSize: 13, color: textSecondary)),
+                      Text(jar.jarName, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textPrimary)),
+                    ]),
+                  ),
+                  // Còn lại
+                  Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                    Text('Còn lại', style: TextStyle(fontSize: 11, color: textSecondary)),
+                    Text(
+                      '${jar.remaining.toInt().toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.')}đ',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold,
+                          color: jar.remaining > 0 ? const Color(0xFF00C096) : Colors.redAccent),
+                    ),
+                  ]),
+                ]),
+                const SizedBox(height: 20),
+
+                // Mô tả
+                _sheetField(descCtrl, 'Mô tả (vd: Mua bánh mì)', Icons.edit_note_rounded, isDark, textPrimary),
+                const SizedBox(height: 14),
+
+                // Số tiền
+                _sheetField(amountCtrl, 'Số tiền (đ)', Icons.payments_outlined, isDark, textPrimary,
+                    inputType: TextInputType.number),
+                const SizedBox(height: 20),
+
+                // Ảnh hóa đơn
+                Text('Ảnh hóa đơn (tuỳ chọn)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: textSecondary)),
+                const SizedBox(height: 10),
+                Row(children: [
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => pickImage(ImageSource.camera),
+                      child: Container(
+                        height: 100,
+                        decoration: BoxDecoration(
+                          color: isDark ? const Color(0xFF2A2940) : const Color(0xFFF5F5F9),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: accent.withValues(alpha: 0.2)),
+                        ),
+                        child: receiptImage != null
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(15),
+                                child: Image.file(receiptImage!, fit: BoxFit.cover))
+                            : Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                                Icon(Icons.camera_alt_outlined, color: accent, size: 28),
+                                const SizedBox(height: 6),
+                                Text('Chụp ảnh', style: TextStyle(color: accent, fontSize: 12, fontWeight: FontWeight.w600)),
+                              ]),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => pickImage(ImageSource.gallery),
+                      child: Container(
+                        height: 100,
+                        decoration: BoxDecoration(
+                          color: isDark ? const Color(0xFF2A2940) : const Color(0xFFF5F5F9),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: accent.withValues(alpha: 0.2)),
+                        ),
+                        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                          Icon(Icons.photo_library_outlined, color: textSecondary, size: 28),
+                          const SizedBox(height: 6),
+                          Text('Thư viện', style: TextStyle(color: textSecondary, fontSize: 12, fontWeight: FontWeight.w600)),
+                        ]),
+                      ),
+                    ),
+                  ),
+                ]),
+                const SizedBox(height: 24),
+
+                // Nút xác nhận
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    icon: const Icon(Icons.check_circle_outline_rounded),
+                    label: const Text('Xác nhận chi tiêu', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                    onPressed: () async {
+                      final desc = descCtrl.text.trim();
+                      final amount = double.tryParse(amountCtrl.text.trim()) ?? 0;
+                      if (desc.isEmpty || amount <= 0) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Hãy nhập mô tả và số tiền hợp lệ'), backgroundColor: Colors.orange));
+                        return;
+                      }
+                      Navigator.pop(ctx);
+
+                      // Tạo giao dịch Chi (isIncome = false)
+                      final result = await ApiService.createTransaction(
+                        jar.jarId,
+                        '1',         // category mặc định
+                        amount,
+                        desc,
+                        false,       // false = chi tiêu
+                        DateTime.now().toIso8601String(),
+                      );
+
+                      if (result != null) {
+                        await _fetchData(); // cập nhật lại spent_amount
+                        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Đã ghi chi ${amount.toInt()}đ – $desc'),
+                            backgroundColor: const Color(0xFF00C096),
+                          ));
+                      } else {
+                        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Lỗi khi tạo giao dịch'), backgroundColor: Colors.redAccent));
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: accent, foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 15),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      elevation: 0,
+                    ),
+                  ),
+                ),
+              ]),
             ),
           ),
         );
@@ -262,6 +430,117 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           ),
         ],
       ),
+    );
+  }
+
+  void _showMembersDialog(JarModel jar) async {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final members = await ApiService.getJarMembers(jar.jarId) ?? [];
+    if (!mounted) return;
+
+    final emailCtrl = TextEditingController();
+    const accent = Color(0xFF4B49EB);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setS) {
+        final bg = isDark ? const Color(0xFF1E1D2E) : Colors.white;
+        final textPrimary = isDark ? const Color(0xFFE4E1EE) : const Color(0xFF1C1C1E);
+        final textSecondary = isDark ? const Color(0xFF9CA3AF) : Colors.grey;
+        return Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+          child: Container(
+            decoration: BoxDecoration(color: bg, borderRadius: const BorderRadius.vertical(top: Radius.circular(28))),
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Center(child: Container(width: 40, height: 4,
+                  decoration: BoxDecoration(color: textSecondary.withValues(alpha: 0.3), borderRadius: BorderRadius.circular(2)))),
+              const SizedBox(height: 18),
+              Text('Thành viên – ${jar.jarName}',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textPrimary)),
+              const SizedBox(height: 16),
+              ...members.map((m) {
+                final name = m['user']?['full_name'] ?? 'Không rõ';
+                final email = m['user']?['email'] ?? '';
+                final role = m['role'] ?? 'Member';
+                return ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: CircleAvatar(
+                    backgroundColor: accent.withValues(alpha: 0.15),
+                    child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?',
+                        style: const TextStyle(color: accent, fontWeight: FontWeight.bold)),
+                  ),
+                  title: Text(name, style: TextStyle(fontWeight: FontWeight.w600, color: textPrimary)),
+                  subtitle: Text(email, style: TextStyle(fontSize: 11, color: textSecondary)),
+                  trailing: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: role == 'Owner' ? accent.withValues(alpha: 0.12) : (isDark ? const Color(0xFF2A2940) : const Color(0xFFF2F2F7)),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(role, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600,
+                        color: role == 'Owner' ? accent : textSecondary)),
+                  ),
+                );
+              }).toList(),
+              const Divider(height: 28),
+              Text('Mời thành viên mới', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: textSecondary)),
+              const SizedBox(height: 10),
+              Row(children: [
+                Expanded(
+                  child: TextField(
+                    controller: emailCtrl,
+                    keyboardType: TextInputType.emailAddress,
+                    style: TextStyle(color: textPrimary),
+                    decoration: InputDecoration(
+                      hintText: 'Nhập email người dùng...',
+                      hintStyle: TextStyle(color: isDark ? Colors.white38 : Colors.grey[400], fontSize: 13),
+                      prefixIcon: const Icon(Icons.email_outlined, size: 18),
+                      filled: true,
+                      fillColor: isDark ? const Color(0xFF2A2940) : const Color(0xFFF5F5F9),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+                      contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                ElevatedButton(
+                  onPressed: () async {
+                    final email = emailCtrl.text.trim();
+                    if (email.isEmpty) return;
+                    final user = await ApiService.findUserByEmail(email);
+                    if (user == null) {
+                      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Không tìm thấy người dùng với email này'), backgroundColor: Colors.redAccent));
+                      return;
+                    }
+                    final result = await ApiService.addJarMember(jar.jarId, user['user_id']);
+                    if (result != null) {
+                      emailCtrl.clear();
+                      final updated = await ApiService.getJarMembers(jar.jarId) ?? [];
+                      setS(() { members.clear(); members.addAll(updated); });
+                      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Đã mời ${user['full_name']} vào hũ!'), backgroundColor: const Color(0xFF00C096)));
+                    } else {
+                      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Người này đã là thành viên hoặc có lỗi xảy ra'), backgroundColor: Colors.orange));
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: accent, foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 18),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    elevation: 0,
+                  ),
+                  child: const Text('Mời', style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ]),
+            ]),
+          ),
+        );
+      }),
     );
   }
 
@@ -489,32 +768,57 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       ),
       child: Column(children: [
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Row(children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(color: iconBg, shape: BoxShape.circle),
-                child: Icon(_jarIcons[iconIndex % _jarIcons.length], color: col, size: 20),
-              ),
-              const SizedBox(width: 12),
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(jar.jarName, style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: textPrimary)),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(color: iconBg, shape: BoxShape.circle),
+              child: Icon(_jarIcons[iconIndex % _jarIcons.length], color: col, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(jar.jarName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: textPrimary)),
                 const SizedBox(height: 2),
-                Text(remainStr, style: TextStyle(fontSize: 12, color: textSecondary, fontWeight: FontWeight.w500)),
+                Text(remainStr,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 12, color: textSecondary, fontWeight: FontWeight.w500)),
               ]),
-            ]),
+            ),
             Row(children: [
-              IconButton(
-                icon: Icon(Icons.edit_outlined, size: 18, color: textSecondary),
-                onPressed: () => _showEditJarDialog(jar),
-                constraints: const BoxConstraints(), padding: EdgeInsets.zero,
+              // 💸 Chi tiêu
+              GestureDetector(
+                onTap: () => _showSpendDialog(jar),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF4B49EB).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    const Icon(Icons.remove_circle_outline_rounded, size: 14, color: Color(0xFF4B49EB)),
+                    const SizedBox(width: 4),
+                    const Text('Chi', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF4B49EB))),
+                  ]),
+                ),
               ),
               const SizedBox(width: 10),
-              IconButton(
-                icon: Icon(Icons.delete_outline_rounded, size: 18, color: textSecondary),
-                onPressed: () => _deleteJar(jar),
-                constraints: const BoxConstraints(), padding: EdgeInsets.zero,
+              GestureDetector(
+                onTap: () => _showMembersDialog(jar),
+                child: Icon(Icons.group_outlined, size: 18, color: textSecondary),
+              ),
+              const SizedBox(width: 14),
+              GestureDetector(
+                onTap: () => _showEditJarDialog(jar),
+                child: Icon(Icons.edit_outlined, size: 18, color: textSecondary),
+              ),
+              const SizedBox(width: 14),
+              GestureDetector(
+                onTap: () => _deleteJar(jar),
+                child: Icon(Icons.delete_outline_rounded, size: 18, color: textSecondary),
               ),
             ]),
           ],

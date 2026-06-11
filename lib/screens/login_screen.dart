@@ -81,24 +81,25 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
         child: SafeArea(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+            physics: const ClampingScrollPhysics(),
+            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 24.0),
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                const SizedBox(height: 16.0),
                 // Logo
                 Container(
-                  width: 72, height: 72,
+                  width: 68, height: 68,
                   decoration: BoxDecoration(
                     color: const Color(0xFF4F46E5),
-                    borderRadius: BorderRadius.circular(24.0),
+                    borderRadius: BorderRadius.circular(22.0),
                     boxShadow: [
                       BoxShadow(color: const Color(0xFF4F46E5).withValues(alpha: 0.35), blurRadius: 20, offset: const Offset(0, 8)),
                     ],
                   ),
-                  child: const Center(child: Icon(Icons.account_balance_wallet_rounded, color: Colors.white, size: 36.0)),
+                  child: const Center(child: Icon(Icons.account_balance_wallet_rounded, color: Colors.white, size: 34.0)),
                 ),
-                const SizedBox(height: 16.0),
+                const SizedBox(height: 14.0),
 
                 // Tên thương hiệu
                 Text('Quản Lý Chi Tiêu',
@@ -106,18 +107,18 @@ class _LoginScreenState extends State<LoginScreen> {
                       fontWeight: FontWeight.w800,
                       color: isDark ? const Color(0xFFE4E1EE) : const Color(0xFF13121B),
                     )),
-                const SizedBox(height: 6.0),
+                const SizedBox(height: 4.0),
 
                 Text('Kiểm soát tài chính, sống trọn vẹn hơn',
                     textAlign: TextAlign.center,
                     style: theme.textTheme.bodyMedium?.copyWith(color: Colors.grey[600], height: 1.4)),
-                const SizedBox(height: 32.0),
+                const SizedBox(height: 24.0),
 
                 // Form card
                 Container(
                   width: double.infinity,
                   constraints: const BoxConstraints(maxWidth: 440),
-                  padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
+                  padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 28.0),
                   decoration: BoxDecoration(
                     color: isDark ? const Color(0x991E1E2E) : Colors.white,
                     borderRadius: BorderRadius.circular(32.0),
@@ -130,51 +131,17 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   child: Form(
                     key: _formKey,
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
                       Text('Chào mừng bạn quay lại',
                           textAlign: TextAlign.center,
                           style: theme.textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.w700, fontSize: 18,
                             color: isDark ? const Color(0xFFE4E1EE) : const Color(0xFF13121B),
                           )),
-                      const SizedBox(height: 24.0),
-
-                      // Đăng nhập Google
-                      OutlinedButton(
-                        onPressed: () {},
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 14.0),
-                          side: BorderSide(color: isDark ? Colors.white.withValues(alpha: 0.15) : Colors.grey[300]!),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(100.0)),
-                          backgroundColor: isDark ? Colors.white.withValues(alpha: 0.02) : Colors.white,
-                        ),
-                        child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                          Image.network('https://lh3.googleusercontent.com/COxitS2mcbB9862J1Alq3Xg8N7WXgCAt6-9mAt1mReU7V62e1KEm47as9Ma35g4N0GQ',
-                            width: 20, height: 20,
-                            errorBuilder: (_, __, ___) => const Icon(Icons.g_mobiledata_rounded, color: Colors.red, size: 24),
-                          ),
-                          const SizedBox(width: 12.0),
-                          Text('Tiếp tục với Google',
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                fontWeight: FontWeight.w600,
-                                color: isDark ? const Color(0xFFE4E1EE) : const Color(0xFF13121B),
-                              )),
-                        ]),
-                      ),
-                      const SizedBox(height: 24.0),
-
-                      // Phân cách
-                      Row(children: [
-                        Expanded(child: Divider(color: isDark ? Colors.white12 : Colors.grey[300])),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                          child: Text('HOẶC ĐĂNG NHẬP BẰNG EMAIL',
-                              style: TextStyle(fontSize: 10.0, fontWeight: FontWeight.bold, letterSpacing: 1.0,
-                                  color: isDark ? Colors.white38 : Colors.grey[500])),
-                        ),
-                        Expanded(child: Divider(color: isDark ? Colors.white12 : Colors.grey[300])),
-                      ]),
-                      const SizedBox(height: 24.0),
+                      const SizedBox(height: 22.0),
 
                       // Email
                       Text('Địa chỉ Email',
@@ -193,7 +160,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           return null;
                         },
                       ),
-                      const SizedBox(height: 20.0),
+                      const SizedBox(height: 18.0),
 
                       // Mật khẩu
                       Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
@@ -224,7 +191,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           return null;
                         },
                       ),
-                      const SizedBox(height: 28.0),
+                      const SizedBox(height: 24.0),
 
                       // Nút đăng nhập
                       ElevatedButton(
@@ -244,7 +211,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ]),
                   ),
                 ),
-                const SizedBox(height: 32.0),
+                const SizedBox(height: 24.0),
 
                 // Đăng ký
                 Row(mainAxisAlignment: MainAxisAlignment.center, children: [
@@ -263,6 +230,7 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
     );
   }
+
 
   InputDecoration _inputDec(String hint, IconData icon, bool isDark, {Widget? suffixIcon}) =>
     InputDecoration(

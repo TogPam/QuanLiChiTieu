@@ -80,7 +80,7 @@ class ApiService {
     return null;
   }
 
-  static Future<Map<String, dynamic>?> updateJar(String jarId, String name, double budget, String jarType) async {
+  static Future<Map<String, dynamic>?> updateJar(String jarId, String name, double budget, int jarType) async {
     try {
       final response = await _dio.put('/jars/$jarId', data: {
         'jar_name': name,
@@ -89,6 +89,43 @@ class ApiService {
       });
       if (response.statusCode == 200) return response.data;
     } catch (e) { print('Lỗi updateJar: $e'); }
+    return null;
+  }
+
+  // ── Jar Members ────────────────────────────────────────────────────────────
+  static Future<List<dynamic>?> getJarMembers(String jarId) async {
+    try {
+      final response = await _dio.get('/jars/$jarId/members');
+      if (response.statusCode == 200) return response.data;
+    } catch (e) { print('Lỗi getJarMembers: $e'); }
+    return null;
+  }
+
+  static Future<Map<String, dynamic>?> addJarMember(String jarId, String userId, {String role = 'Member'}) async {
+    try {
+      final response = await _dio.post('/jars/$jarId/members', data: {
+        'user_id': userId,
+        'role': role,
+      });
+      if (response.statusCode == 201) return response.data;
+    } catch (e) { print('Lỗi addJarMember: $e'); }
+    return null;
+  }
+
+  static Future<bool> removeJarMember(String jarId, String userId) async {
+    try {
+      final response = await _dio.delete('/jars/$jarId/members/$userId');
+      if (response.statusCode == 204) return true;
+    } catch (e) { print('Lỗi removeJarMember: $e'); }
+    return false;
+  }
+
+  /// Tìm user theo email để mời
+  static Future<Map<String, dynamic>?> findUserByEmail(String email) async {
+    try {
+      final response = await _dio.get('/auth/users', queryParameters: {'email': email});
+      if (response.statusCode == 200) return response.data;
+    } catch (e) { print('Lỗi findUserByEmail: $e'); }
     return null;
   }
 
