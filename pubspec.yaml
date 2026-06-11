@@ -1,14 +1,17 @@
 name: quan_li_chi_tieu
-description: "A new Flutter project."
+description: "Ứng dụng Quản Lý Chi Tiêu"
 publish_to: "none"
 version: 0.1.0+1
 
 environment:
-  sdk: ^3.11.4
+  sdk: ^3.10.7
 
 dependencies:
   flutter:
     sdk: flutter
+  image_picker: ^1.1.2
+  path_provider: ^2.1.4
+  intl: ^0.19.0
 
 dev_dependencies:
   flutter_test:
