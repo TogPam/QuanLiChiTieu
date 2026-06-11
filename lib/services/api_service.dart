@@ -34,6 +34,11 @@ class ApiService {
     }
   }
 
+  static void logout() {
+    _accessToken = null;
+    _dio.options.headers.remove('Authorization');
+  }
+
   static Future<Map<String, dynamic>?> getMe() async {
     try {
       final response = await _dio.get('/auth/me');

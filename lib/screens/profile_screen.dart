@@ -5,6 +5,7 @@ import '../controllers/theme_controller.dart';
 import '../services/notification_service.dart';
 import '../services/api_service.dart';
 import 'notification_screen.dart';
+import 'login_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({Key? key}) : super(key: key);
@@ -377,7 +378,13 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
 
               // Đăng xuất
               InkWell(
-                onTap: () {},
+                onTap: () {
+                  ApiService.logout();
+                  Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute(builder: (_) => const LoginScreen()),
+                    (route) => false,
+                  );
+                },
                 borderRadius: BorderRadius.circular(20),
                 child: Container(
                   padding: const EdgeInsets.symmetric(vertical: 15),
