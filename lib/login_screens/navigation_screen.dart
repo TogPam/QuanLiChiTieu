@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'dart:io';
+import 'package:image_picker/image_picker.dart';
 import '../screens/home_screen.dart';
 import '../screens/analysis_screen.dart';
 import '../screens/activity_screen.dart';
@@ -13,7 +15,7 @@ class MainNavigationScreen extends StatefulWidget {
 }
 
 class _MainNavigationScreenState extends State<MainNavigationScreen>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   int _selectedIndex = 0;
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
@@ -26,9 +28,19 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
     ProfileScreen(),
   ];
 
+  bool _isPopupShowing = false;
+
+  final List<Map<String, dynamic>> _jars = [
+    {'id': '1', 'name': 'Tiền ăn', 'icon': Icons.restaurant_rounded, 'color': const Color(0xFFFF7A00)},
+    {'id': '2', 'name': 'Đi chơi', 'icon': Icons.celebration_rounded, 'color': const Color(0xFFB5179E)},
+    {'id': '3', 'name': 'Học tập', 'icon': Icons.school_rounded, 'color': const Color(0xFF4361EE)},
+    {'id': '4', 'name': 'Tiền nhà', 'icon': Icons.home_work_rounded, 'color': const Color(0xFF00C096)},
+  ];
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _fadeController = AnimationController(
       duration: const Duration(milliseconds: 220),
       vsync: this,
@@ -42,6 +54,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _fadeController.dispose();
     super.dispose();
   }
@@ -52,6 +65,158 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
       setState(() => _selectedIndex = index);
       _fadeController.forward();
     });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      if (!_isPopupShowing) {
+        _showResumeCameraPopup();
+      }
+    }
+  }
+
+  void _showResumeCameraPopup() {
+    _isPopupShowing = true;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        final cardColor = isDark ? const Color(0xFF1E1D2E) : Colors.white;
+        final textPrimary = isDark ? const Color(0xFFE4E1EE) : const Color(0xFF1C1C1E);
+        final textSecondary = isDark ? const Color(0xFF9CA3AF) : Colors.grey;
+        
+        return Container(
+          padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+          decoration: BoxDecoration(
+            color: cardColor,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(width: 40, height: 4, decoration: BoxDecoration(color: textSecondary.withValues(alpha: 0.3), borderRadius: BorderRadius.circular(2))),
+              const SizedBox(height: 18),
+              Text('Chào mừng trở lại! 👋', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: textPrimary)),
+              const SizedBox(height: 8),
+              Text('Bạn vừa chi tiêu gì đó? Chọn hũ để lưu lại ngay!', style: TextStyle(fontSize: 14, color: textSecondary), textAlign: TextAlign.center),
+              const SizedBox(height: 24),
+              GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, childAspectRatio: 2.5, mainAxisSpacing: 12, crossAxisSpacing: 12),
+                itemCount: _jars.length,
+                itemBuilder: (_, i) {
+                  final jar = _jars[i];
+                  return GestureDetector(
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _openCameraForJar(jar);
+                    },
+                    child: Container(
+                      decoration: BoxDecoration(color: isDark ? const Color(0xFF2A2940) : const Color(0xFFF2F2F7), borderRadius: BorderRadius.circular(16)),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(jar['icon'] as IconData, color: jar['color'] as Color, size: 20),
+                          const SizedBox(width: 8),
+                          Text(jar['name'] as String, style: TextStyle(color: textPrimary, fontWeight: FontWeight.w600, fontSize: 14)),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 16),
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _isPopupShowing = false;
+                },
+                child: Text('Để sau', style: TextStyle(color: textSecondary, fontSize: 15)),
+              ),
+            ],
+          ),
+        );
+      },
+    ).whenComplete(() {
+      // Allow it to be shown again if dismissed without picking
+      if (!_isPopupShowing) return; 
+    });
+  }
+
+  Future<void> _openCameraForJar(Map<String, dynamic> jar) async {
+    final picker = ImagePicker();
+    try {
+      final pickedFile = await picker.pickImage(source: ImageSource.camera);
+      if (pickedFile != null) {
+        _showDescriptionDialog(jar, File(pickedFile.path));
+      } else {
+        _isPopupShowing = false;
+      }
+    } catch (e) {
+      debugPrint("Camera error: $e");
+      _isPopupShowing = false;
+    }
+  }
+
+  void _showDescriptionDialog(Map<String, dynamic> jar, File image) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textPrimary = isDark ? const Color(0xFFE4E1EE) : const Color(0xFF1C1C1E);
+    final descCtrl = TextEditingController();
+    final amountCtrl = TextEditingController();
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: isDark ? const Color(0xFF1E1D2E) : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('Chi tiết giao dịch', style: TextStyle(color: textPrimary, fontWeight: FontWeight.bold)),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ClipRRect(borderRadius: BorderRadius.circular(12), child: Image.file(image, height: 120, width: double.infinity, fit: BoxFit.cover)),
+              const SizedBox(height: 16),
+              TextField(
+                controller: amountCtrl,
+                keyboardType: TextInputType.number,
+                style: TextStyle(color: textPrimary),
+                decoration: InputDecoration(hintText: 'Số tiền (đ)', filled: true, fillColor: isDark ? const Color(0xFF2A2940) : const Color(0xFFF5F5F9), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: descCtrl,
+                style: TextStyle(color: textPrimary),
+                decoration: InputDecoration(hintText: 'Mô tả (tuỳ chọn)', filled: true, fillColor: isDark ? const Color(0xFF2A2940) : const Color(0xFFF5F5F9), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _isPopupShowing = false;
+            },
+            child: const Text('Bỏ qua', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _isPopupShowing = false;
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Lưu giao dịch thành công!')));
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF4B49EB), foregroundColor: Colors.white),
+            child: const Text('Lưu'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override

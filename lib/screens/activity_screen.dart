@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'dart:io';
+import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
+
 
 class ActivityScreen extends StatefulWidget {
   const ActivityScreen({Key? key}) : super(key: key);
@@ -29,6 +33,13 @@ class _ActivityScreenState extends State<ActivityScreen> with SingleTickerProvid
   final _categories = ['Tất cả', 'Ăn uống', 'Thu nhập', 'Giải trí', 'Học tập', 'Tiền nhà'];
   final _monthNames = ['Tháng 1','Tháng 2','Tháng 3','Tháng 4','Tháng 5','Tháng 6',
                        'Tháng 7','Tháng 8','Tháng 9','Tháng 10','Tháng 11','Tháng 12'];
+
+  final List<Map<String, dynamic>> _jars = [
+    {'id': '1', 'name': 'Tiền ăn', 'icon': Icons.restaurant_rounded, 'color': const Color(0xFFFF7A00)},
+    {'id': '2', 'name': 'Đi chơi', 'icon': Icons.celebration_rounded, 'color': const Color(0xFFB5179E)},
+    {'id': '3', 'name': 'Học tập', 'icon': Icons.school_rounded, 'color': const Color(0xFF4361EE)},
+    {'id': '4', 'name': 'Tiền nhà', 'icon': Icons.home_work_rounded, 'color': const Color(0xFF00C096)},
+  ];
 
   @override
   void initState() {
@@ -124,6 +135,219 @@ class _ActivityScreenState extends State<ActivityScreen> with SingleTickerProvid
               ),
             ),
           ]),
+        );
+      }),
+    );
+  }
+
+  void _showAddTransactionSheet() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
+    final amountCtrl = TextEditingController();
+    final descCtrl = TextEditingController();
+    String? selectedJarId;
+    File? selectedImage;
+    final picker = ImagePicker();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setModalState) {
+        final cardColor = isDark ? const Color(0xFF1E1D2E) : Colors.white;
+        final textPrimary = isDark ? const Color(0xFFE4E1EE) : const Color(0xFF1C1C1E);
+        final textSecondary = isDark ? const Color(0xFF9CA3AF) : Colors.grey;
+        const accent = Color(0xFF4B49EB);
+
+        Future<void> pickImage() async {
+          try {
+            final pickedFile = await picker.pickImage(source: ImageSource.camera);
+            if (pickedFile != null) {
+              setModalState(() {
+                selectedImage = File(pickedFile.path);
+              });
+            }
+          } catch (e) {
+            debugPrint("Image picker error: $e");
+          }
+        }
+
+        return Container(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+          decoration: BoxDecoration(
+            color: cardColor,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40, height: 4,
+                    decoration: BoxDecoration(
+                      color: textSecondary.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Text('Thêm giao dịch mới',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: textPrimary)),
+                const SizedBox(height: 20),
+                
+                // Nhập số tiền
+                TextField(
+                  controller: amountCtrl,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  style: TextStyle(color: textPrimary, fontSize: 18, fontWeight: FontWeight.w600),
+                  decoration: InputDecoration(
+                    hintText: 'Số tiền (đ)',
+                    hintStyle: TextStyle(color: isDark ? Colors.white38 : Colors.grey[400]),
+                    prefixIcon: const Icon(Icons.monetization_on_outlined, size: 22),
+                    filled: true,
+                    fillColor: isDark ? const Color(0xFF2A2940) : const Color(0xFFF5F5F9),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Chọn Hũ
+                Text('Chọn hũ chi tiêu', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: textSecondary)),
+                const SizedBox(height: 10),
+                SizedBox(
+                  height: 50,
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: _jars.length,
+                    itemBuilder: (_, i) {
+                      final jar = _jars[i];
+                      final isSelected = selectedJarId == jar['id'];
+                      return GestureDetector(
+                        onTap: () => setModalState(() => selectedJarId = jar['id'] as String),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          margin: const EdgeInsets.only(right: 12),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: isSelected ? jar['color'] : (isDark ? const Color(0xFF2A2940) : const Color(0xFFF2F2F7)),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: isSelected ? (jar['color'] as Color) : Colors.transparent, width: 2),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(jar['icon'] as IconData, 
+                                color: isSelected ? Colors.white : (jar['color'] as Color), size: 18),
+                              const SizedBox(width: 8),
+                              Text(jar['name'] as String, style: TextStyle(
+                                color: isSelected ? Colors.white : textPrimary, 
+                                fontWeight: FontWeight.w600, fontSize: 13,
+                              )),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Nhập mô tả
+                TextField(
+                  controller: descCtrl,
+                  style: TextStyle(color: textPrimary),
+                  decoration: InputDecoration(
+                    hintText: 'Mô tả chi tiết...',
+                    hintStyle: TextStyle(color: isDark ? Colors.white38 : Colors.grey[400], fontSize: 14),
+                    prefixIcon: const Icon(Icons.description_outlined, size: 20),
+                    filled: true,
+                    fillColor: isDark ? const Color(0xFF2A2940) : const Color(0xFFF5F5F9),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Chụp ảnh
+                Text('Ảnh hoá đơn / sản phẩm', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: textSecondary)),
+                const SizedBox(height: 10),
+                GestureDetector(
+                  onTap: pickImage,
+                  child: Container(
+                    height: 100,
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF2A2940) : const Color(0xFFF5F5F9),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: isDark ? Colors.white24 : Colors.grey[300]!, style: BorderStyle.solid),
+                    ),
+                    child: selectedImage != null
+                        ? ClipRRect(
+                            borderRadius: BorderRadius.circular(16),
+                            child: Image.file(selectedImage!, fit: BoxFit.cover, width: double.infinity),
+                          )
+                        : Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.camera_alt_outlined, color: textSecondary, size: 32),
+                              const SizedBox(height: 8),
+                              Text('Chạm để chụp ảnh', style: TextStyle(color: textSecondary, fontSize: 13)),
+                            ],
+                          ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      final amountStr = amountCtrl.text.trim();
+                      final desc = descCtrl.text.trim();
+                      
+                      if (amountStr.isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Vui lòng nhập số tiền')));
+                        return;
+                      }
+                      if (selectedJarId == null) {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Vui lòng chọn hũ chi tiêu')));
+                        return;
+                      }
+
+                      // Tạo mock data cho transaction mới
+                      final selectedJar = _jars.firstWhere((j) => j['id'] == selectedJarId);
+                      
+                      setState(() {
+                        _transactions.insert(0, {
+                          'title': desc.isNotEmpty ? desc : 'Giao dịch mới',
+                          'category': selectedJar['name'],
+                          'time': 'Vừa xong',
+                          'date': 'Hôm nay',
+                          'amount': '-$amountStr',
+                          'isExpense': true,
+                        });
+                      });
+
+                      Navigator.pop(ctx);
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Thêm giao dịch thành công!')));
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: accent, foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      elevation: 0,
+                    ),
+                    child: const Text('Thêm giao dịch', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ],
+            ),
+          ),
         );
       }),
     );
@@ -237,7 +461,7 @@ class _ActivityScreenState extends State<ActivityScreen> with SingleTickerProvid
         ]),
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () {},
+        onPressed: _showAddTransactionSheet,
         backgroundColor: accent,
         child: const Icon(Icons.add_rounded, color: Colors.white),
       ),

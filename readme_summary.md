@@ -174,40 +174,6 @@ Hiển thị báo cáo
 
 ---
 
-# Hướng phát triển
-
-Các tính năng có thể bổ sung trong tương lai:
-
-## Firebase Authentication
-
-* Đăng ký tài khoản.
-* Đăng nhập bằng Email/Password.
-* Đăng nhập Google.
-
-## Cloud Database
-
-* Firebase Firestore.
-* Đồng bộ dữ liệu đa thiết bị.
-
-## Thông báo
-
-* Nhắc ghi chép chi tiêu.
-* Cảnh báo vượt ngân sách.
-
-## Báo cáo nâng cao
-
-* Xuất PDF.
-* Xuất Excel.
-* Chia sẻ báo cáo.
-
-## AI Finance Assistant
-
-* Phân tích thói quen chi tiêu.
-* Đề xuất kế hoạch tiết kiệm.
-* Dự đoán ngân sách tương lai.
-
----
-
 # Đối tượng sử dụng
 
 * Sinh viên.
