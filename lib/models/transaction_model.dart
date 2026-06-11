@@ -43,15 +43,15 @@ class TransactionModel {
   // ── Serialization ────────────────────────────────────────────────
   factory TransactionModel.fromJson(Map<String, dynamic> json) =>
       TransactionModel(
-        transactionId: json['TransactionId'] as String,
-        jarId: json['JarId'] as String,
-        userId: json['UserId'] as String,
-        categoryId: json['CategoryId'] as int,
-        amount: (json['Amount'] as num).toDouble(),
-        description: json['Description'] as String?,
-        receiptImageUrl: json['ReceiptImageUrl'] as String?,
-        transactionType: _parseBit(json['TransactionType']),
-        transactionDate: DateTime.parse(json['TransactionDate'] as String),
+        transactionId: (json['TransactionId'] ?? json['transaction_id']) as String,
+        jarId: (json['JarId'] ?? json['jar_id']) as String,
+        userId: (json['UserId'] ?? json['user_id']) as String,
+        categoryId: (json['CategoryId'] ?? json['category_id']) as int,
+        amount: (json['Amount'] ?? json['amount'] as num).toDouble(),
+        description: (json['Description'] ?? json['description']) as String?,
+        receiptImageUrl: (json['ReceiptImageUrl'] ?? json['receipt_image_url']) as String?,
+        transactionType: _parseBit(json['TransactionType'] ?? json['transaction_type']),
+        transactionDate: DateTime.parse((json['TransactionDate'] ?? json['transaction_date']) as String),
       );
 
   Map<String, dynamic> toJson() => {

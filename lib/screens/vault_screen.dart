@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../services/api_service.dart';
 
 class VaultScreen extends StatefulWidget {
   const VaultScreen({Key? key}) : super(key: key);
@@ -12,11 +13,8 @@ class _VaultScreenState extends State<VaultScreen> with SingleTickerProviderStat
   late Animation<double> _fadeAnim;
   late Animation<Offset> _slideAnim;
 
-  final List<Map<String, dynamic>> _goals = [
-    {'id': '1', 'title': 'Mua xe ô tô', 'subtitle': 'Quỹ mua xe', 'saved': 67500000, 'target': 90000000, 'days': 142, 'color': const Color(0xFF4B49EB), 'icon': Icons.directions_car_rounded},
-    {'id': '2', 'title': 'Du lịch châu Âu', 'subtitle': 'Du lịch & Nghỉ dưỡng', 'saved': 6000000, 'target': 15000000, 'days': 88, 'color': const Color(0xFF00C096), 'icon': Icons.flight_takeoff_rounded},
-    {'id': '3', 'title': 'Quỹ dự phòng', 'subtitle': 'An toàn tài chính', 'saved': 23750000, 'target': 25000000, 'days': 12, 'color': const Color(0xFFE63946), 'icon': Icons.security_rounded},
-  ];
+  List<dynamic> _goals = [];
+  bool _isLoading = true;
 
   @override
   void initState() {
@@ -26,6 +24,27 @@ class _VaultScreenState extends State<VaultScreen> with SingleTickerProviderStat
     _slideAnim = Tween<Offset>(begin: const Offset(0, 0.05), end: Offset.zero)
         .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
     _ctrl.forward();
+    _fetchData();
+  }
+
+  Future<void> _fetchData() async {
+    setState(() => _isLoading = true);
+    final jars = await ApiService.getJars();
+    if (jars != null && mounted) {
+      setState(() {
+        _goals = jars.map((j) => {
+          'id': j['jar_id'] ?? j['JarId'],
+          'title': j['jar_name'] ?? j['JarName'] ?? 'Mục tiêu',
+          'subtitle': j['description'] ?? j['Description'] ?? 'Mục tiêu tiết kiệm',
+          'saved': j['spent_amount'] ?? j['SpentAmount'] ?? 0,
+          'target': j['budget'] ?? j['Budget'] ?? 0,
+          'days': 30,
+          'color': const Color(0xFF4B49EB),
+          'icon': Icons.account_balance_wallet_rounded,
+        }).toList();
+        _isLoading = false;
+      });
+    }
   }
 
   @override
@@ -119,23 +138,15 @@ class _VaultScreenState extends State<VaultScreen> with SingleTickerProviderStat
               )),
               const SizedBox(height: 24),
               SizedBox(width: double.infinity, child: ElevatedButton(
-                onPressed: () {
+                onPressed: () async {
                   final title = titleCtrl.text.trim();
                   if (title.isEmpty) return;
                   final target = double.tryParse(targetCtrl.text.trim()) ?? 0;
-                  final saved = double.tryParse(savedCtrl.text.trim()) ?? 0;
-                  final days = int.tryParse(daysCtrl.text.trim()) ?? 30;
                   Navigator.pop(ctx);
-                  setState(() {
-                    _goals.add({
-                      'id': DateTime.now().millisecondsSinceEpoch.toString(),
-                      'title': title,
-                      'subtitle': subtitleCtrl.text.trim().isEmpty ? 'Mục tiêu cá nhân' : subtitleCtrl.text.trim(),
-                      'saved': saved.toInt(), 'target': target.toInt(),
-                      'days': days, 'color': colors[selectedColor],
-                      'icon': icons[selectedIcon],
-                    });
-                  });
+                  
+                  // Gọi API tạo mục tiêu
+                  await ApiService.createJar(title, target, '1'); // 1 = Personal
+                  _fetchData();
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: accent, foregroundColor: Colors.white,
@@ -176,7 +187,7 @@ class _VaultScreenState extends State<VaultScreen> with SingleTickerProviderStat
     final textSecondary = isDark ? const Color(0xFF9CA3AF) : Colors.grey;
     const accent = Color(0xFF4B49EB);
 
-    final totalSaved = _goals.fold<int>(0, (s, g) => s + (g['saved'] as int));
+    final totalSaved = _goals.fold<double>(0.0, (s, g) => s + double.parse(g['saved'].toString()));
 
     return Scaffold(
       backgroundColor: bgColor,
@@ -193,7 +204,7 @@ class _VaultScreenState extends State<VaultScreen> with SingleTickerProviderStat
             Text('TỔNG TIẾT KIỆM', style: TextStyle(fontSize: 11, color: textSecondary, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
             const SizedBox(height: 6),
             Row(children: [
-              Text(_formatMoney(totalSaved), style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: textPrimary)),
+              Text('${totalSaved.toInt().toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.')}đ', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: textPrimary)),
               const SizedBox(width: 10),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -229,10 +240,15 @@ class _VaultScreenState extends State<VaultScreen> with SingleTickerProviderStat
             const SizedBox(height: 24),
 
             // Danh sách mục tiêu
-            ..._goals.map((g) => Padding(
-              padding: const EdgeInsets.only(bottom: 16),
-              child: _goalCard(g, cardColor, textPrimary, textSecondary, isDark),
-            )),
+            if (_isLoading)
+              const Center(child: CircularProgressIndicator())
+            else if (_goals.isEmpty)
+              const Center(child: Padding(padding: EdgeInsets.all(20), child: Text("Chưa có mục tiêu nào")))
+            else
+              ..._goals.map((g) => Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: _goalCard(g, cardColor, textPrimary, textSecondary, isDark),
+              )),
 
             // Nhận định tháng này
             Container(
@@ -262,9 +278,11 @@ class _VaultScreenState extends State<VaultScreen> with SingleTickerProviderStat
     );
   }
 
-  Widget _goalCard(Map g, Color cardColor, Color textPrimary, Color textSecondary, bool isDark) {
+  Widget _goalCard(dynamic g, Color cardColor, Color textPrimary, Color textSecondary, bool isDark) {
     final Color color = g['color'] as Color;
-    final double percent = ((g['saved'] as int) / (g['target'] as int)).clamp(0.0, 1.0);
+    final double target = double.parse(g['target'].toString());
+    final double saved = double.parse(g['saved'].toString());
+    final double percent = target > 0 ? (saved / target).clamp(0.0, 1.0) : 0.0;
     final pctLabel = '${(percent * 100).toInt()}%';
     return Container(
       padding: const EdgeInsets.all(20),
@@ -298,7 +316,7 @@ class _VaultScreenState extends State<VaultScreen> with SingleTickerProviderStat
           Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('Tiến độ', style: TextStyle(color: textSecondary, fontSize: 10)),
             const SizedBox(height: 2),
-            Text('${_formatMoney(g['saved'] as int)} / ${_formatMoneyShort(g['target'] as int)}',
+            Text('${_formatMoney(saved.toInt())} / ${_formatMoneyShort(target.toInt())}',
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: textPrimary)),
           ]),
           Column(crossAxisAlignment: CrossAxisAlignment.end, children: [

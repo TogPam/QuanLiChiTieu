@@ -72,14 +72,14 @@ class JarModel {
 
   // ── Serialization ────────────────────────────────────────────────
   factory JarModel.fromJson(Map<String, dynamic> json) => JarModel(
-        jarId: json['JarId'] as String,
-        jarName: json['JarName'] as String,
-        description: json['Description'] as String?,
-        budget: (json['Budget'] as num?)?.toDouble() ?? 0,
-        jarType: JarTypeExtension.fromValue(json['JarType'] as int? ?? 1),
-        createdByUserId: json['CreatedByUserId'] as String,
-        createdAt: DateTime.parse(json['CreatedAt'] as String),
-        spentAmount: (json['SpentAmount'] as num?)?.toDouble() ?? 0,
+        jarId: (json['JarId'] ?? json['jar_id']) as String,
+        jarName: (json['JarName'] ?? json['jar_name']) as String,
+        description: (json['Description'] ?? json['description']) as String?,
+        budget: (json['Budget'] ?? json['budget'] as num?)?.toDouble() ?? 0,
+        jarType: JarTypeExtension.fromValue((json['JarType'] ?? json['jar_type']) as int? ?? 1),
+        createdByUserId: (json['CreatedByUserId'] ?? json['created_by_user_id']) as String,
+        createdAt: DateTime.parse((json['CreatedAt'] ?? json['created_at']) as String),
+        spentAmount: (json['SpentAmount'] ?? json['spent_amount'] as num?)?.toDouble() ?? 0,
       );
 
   Map<String, dynamic> toJson() => {

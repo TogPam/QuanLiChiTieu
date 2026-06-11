@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
+import '../services/api_service.dart';
 
 class AnalysisScreen extends StatefulWidget {
   const AnalysisScreen({Key? key}) : super(key: key);
@@ -14,6 +15,11 @@ class _AnalysisScreenState extends State<AnalysisScreen>
   late Animation<double> _fadeAnim;
   late Animation<Offset> _slideAnim;
 
+  double _savingRate = 0;
+  double _totalExpense = 0;
+  int _totalJarsCount = 0;
+  bool _isLoading = true;
+
   @override
   void initState() {
     super.initState();
@@ -23,6 +29,21 @@ class _AnalysisScreenState extends State<AnalysisScreen>
     _slideAnim = Tween<Offset>(begin: const Offset(0, 0.05), end: Offset.zero)
         .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
     _ctrl.forward();
+    _fetchData();
+  }
+
+  Future<void> _fetchData() async {
+    setState(() => _isLoading = true);
+    final db = await ApiService.getDashboard();
+    if (db != null && mounted) {
+      setState(() {
+         _savingRate = (db['saving_rate'] ?? 0).toDouble();
+         _totalExpense = (db['total_expense'] ?? 0).toDouble();
+         final jarsList = db['jars'] as List<dynamic>? ?? [];
+         _totalJarsCount = jarsList.length;
+         _isLoading = false;
+      });
+    }
   }
 
   @override
@@ -78,7 +99,7 @@ class _AnalysisScreenState extends State<AnalysisScreen>
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Đánh giá chi tiêu của bạn – Tháng 6/2025',
+                  'Đánh giá chi tiêu của bạn – Tháng ${DateTime.now().month}/${DateTime.now().year}',
                   style: TextStyle(fontSize: 13, color: textSecondary),
                 ),
                 const SizedBox(height: 20),
@@ -194,19 +215,19 @@ class _AnalysisScreenState extends State<AnalysisScreen>
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Column(
+                      Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
+                          const Text(
                             'TỈ LỆ TIẾT KIỆM THÁNG NÀY',
                             style: TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.bold,
                                 color: Colors.white70),
                           ),
-                          SizedBox(height: 4),
+                          const SizedBox(height: 4),
                           Text(
-                            '32,4%',
+                            '${_savingRate}%',
                             style: TextStyle(
                                 fontSize: 32,
                                 fontWeight: FontWeight.bold,
@@ -237,7 +258,7 @@ class _AnalysisScreenState extends State<AnalysisScreen>
                     Expanded(
                       child: _buildMiniStatCard(
                         title: 'Chi tiêu TB/ngày',
-                        value: '215.000đ',
+                        value: '${(_totalExpense / 30).toInt().toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.')}đ',
                         icon: Icons.payments_outlined,
                         cardColor: cardColor,
                         textPrimary: textPrimary,

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
-
+import '../services/api_service.dart';
 
 class ActivityScreen extends StatefulWidget {
   const ActivityScreen({Key? key}) : super(key: key);
@@ -18,28 +18,16 @@ class _ActivityScreenState extends State<ActivityScreen> with SingleTickerProvid
   String _searchText = '';
 
   // Tháng hiện tại
-  int _selectedMonth = 6;
-  int _selectedYear = 2025;
+  int _selectedMonth = DateTime.now().month;
+  int _selectedYear = DateTime.now().year;
 
-  final List<Map<String, dynamic>> _transactions = [
-    {'title': 'Tiệm bánh mì Như Lan', 'category': 'Ăn uống', 'time': '09:12 SA', 'date': 'Hôm nay', 'amount': '-32.000', 'isExpense': true},
-    {'title': 'Lương tháng 6', 'category': 'Thu nhập', 'time': '08:00 SA', 'date': 'Hôm nay', 'amount': '+8.000.000', 'isExpense': false},
-    {'title': 'Netflix', 'category': 'Giải trí', 'time': '11:45 CH', 'date': 'Hôm qua', 'amount': '-180.000', 'isExpense': true},
-    {'title': 'Khoá học Udemy', 'category': 'Học tập', 'time': '02:30 CH', 'date': 'Hôm qua', 'amount': '-450.000', 'isExpense': true},
-    {'title': 'Tiền thuê phòng', 'category': 'Tiền nhà', 'time': '10:00 SA', 'date': 'Hôm qua', 'amount': '-3.500.000', 'isExpense': true},
-    {'title': 'Siêu thị Vinmart', 'category': 'Ăn uống', 'time': '05:10 CH', 'date': 'Chủ nhật', 'amount': '-215.000', 'isExpense': true},
-  ];
+  List<dynamic> _transactions = [];
+  List<dynamic> _jars = [];
+  bool _isLoading = true;
 
   final _categories = ['Tất cả', 'Ăn uống', 'Thu nhập', 'Giải trí', 'Học tập', 'Tiền nhà'];
   final _monthNames = ['Tháng 1','Tháng 2','Tháng 3','Tháng 4','Tháng 5','Tháng 6',
                        'Tháng 7','Tháng 8','Tháng 9','Tháng 10','Tháng 11','Tháng 12'];
-
-  final List<Map<String, dynamic>> _jars = [
-    {'id': '1', 'name': 'Tiền ăn', 'icon': Icons.restaurant_rounded, 'color': const Color(0xFFFF7A00)},
-    {'id': '2', 'name': 'Đi chơi', 'icon': Icons.celebration_rounded, 'color': const Color(0xFFB5179E)},
-    {'id': '3', 'name': 'Học tập', 'icon': Icons.school_rounded, 'color': const Color(0xFF4361EE)},
-    {'id': '4', 'name': 'Tiền nhà', 'icon': Icons.home_work_rounded, 'color': const Color(0xFF00C096)},
-  ];
 
   @override
   void initState() {
@@ -48,16 +36,31 @@ class _ActivityScreenState extends State<ActivityScreen> with SingleTickerProvid
     _fadeAnim = CurvedAnimation(parent: _ctrl, curve: Curves.easeOut);
     _ctrl.forward();
     _searchCtrl.addListener(() => setState(() => _searchText = _searchCtrl.text));
+    _fetchData();
+  }
+
+  Future<void> _fetchData() async {
+    setState(() => _isLoading = true);
+    final txs = await ApiService.getTransactions(month: _selectedMonth, year: _selectedYear);
+    final jarsData = await ApiService.getJars();
+    
+    if (mounted) {
+      setState(() {
+        _transactions = txs ?? [];
+        _jars = jarsData ?? [];
+        _isLoading = false;
+      });
+    }
   }
 
   @override
   void dispose() { _ctrl.dispose(); _searchCtrl.dispose(); super.dispose(); }
 
-  List<Map<String, dynamic>> get _filtered => _transactions.where((t) {
-    final catOk = _selectedCategory == 'Tất cả' || t['category'] == _selectedCategory;
-    final searchOk = _searchText.isEmpty ||
-        (t['title'] as String).toLowerCase().contains(_searchText.toLowerCase());
-    return catOk && searchOk;
+  List<dynamic> get _filtered => _transactions.where((t) {
+    // Không dùng filter Category cho bây giờ vì API trả category_id, hoặc mapping
+    final title = (t['description'] ?? t['Description'] ?? 'Giao dịch').toString().toLowerCase();
+    final searchOk = _searchText.isEmpty || title.contains(_searchText.toLowerCase());
+    return searchOk;
   }).toList();
 
   void _showMonthPicker() {
@@ -125,6 +128,7 @@ class _ActivityScreenState extends State<ActivityScreen> with SingleTickerProvid
                 onPressed: () {
                   Navigator.pop(ctx);
                   setState(() { _selectedMonth = tempMonth; _selectedYear = tempYear; });
+                  _fetchData();
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: accent, foregroundColor: Colors.white,
@@ -226,25 +230,26 @@ class _ActivityScreenState extends State<ActivityScreen> with SingleTickerProvid
                     itemCount: _jars.length,
                     itemBuilder: (_, i) {
                       final jar = _jars[i];
-                      final isSelected = selectedJarId == jar['id'];
+                      final isSelected = selectedJarId == (jar['JarId'] ?? jar['jar_id']);
+                      final jarName = jar['JarName'] ?? jar['jar_name'] ?? '';
                       return GestureDetector(
-                        onTap: () => setModalState(() => selectedJarId = jar['id'] as String),
+                        onTap: () => setModalState(() => selectedJarId = (jar['JarId'] ?? jar['jar_id']) as String),
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 200),
                           margin: const EdgeInsets.only(right: 12),
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                           decoration: BoxDecoration(
-                            color: isSelected ? jar['color'] : (isDark ? const Color(0xFF2A2940) : const Color(0xFFF2F2F7)),
+                            color: isSelected ? accent : (isDark ? const Color(0xFF2A2940) : const Color(0xFFF2F2F7)),
                             borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: isSelected ? (jar['color'] as Color) : Colors.transparent, width: 2),
+                            border: Border.all(color: isSelected ? accent : Colors.transparent, width: 2),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(jar['icon'] as IconData, 
-                                color: isSelected ? Colors.white : (jar['color'] as Color), size: 18),
+                              Icon(Icons.account_balance_wallet_rounded, 
+                                color: isSelected ? Colors.white : accent, size: 18),
                               const SizedBox(width: 8),
-                              Text(jar['name'] as String, style: TextStyle(
+                              Text(jarName, style: TextStyle(
                                 color: isSelected ? Colors.white : textPrimary, 
                                 fontWeight: FontWeight.w600, fontSize: 13,
                               )),
@@ -306,7 +311,7 @@ class _ActivityScreenState extends State<ActivityScreen> with SingleTickerProvid
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: () {
+                    onPressed: () async {
                       final amountStr = amountCtrl.text.trim();
                       final desc = descCtrl.text.trim();
                       
@@ -319,21 +324,18 @@ class _ActivityScreenState extends State<ActivityScreen> with SingleTickerProvid
                         return;
                       }
 
-                      // Tạo mock data cho transaction mới
-                      final selectedJar = _jars.firstWhere((j) => j['id'] == selectedJarId);
-                      
-                      setState(() {
-                        _transactions.insert(0, {
-                          'title': desc.isNotEmpty ? desc : 'Giao dịch mới',
-                          'category': selectedJar['name'],
-                          'time': 'Vừa xong',
-                          'date': 'Hôm nay',
-                          'amount': '-$amountStr',
-                          'isExpense': true,
-                        });
-                      });
-
                       Navigator.pop(ctx);
+                      
+                      await ApiService.createTransaction(
+                        selectedJarId!, 
+                        1.toString(), // Default Category ID
+                        double.parse(amountStr), 
+                        desc, 
+                        false, // isIncome
+                        null
+                      );
+                      
+                      _fetchData();
                       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Thêm giao dịch thành công!')));
                     },
                     style: ElevatedButton.styleFrom(
@@ -445,18 +447,14 @@ class _ActivityScreenState extends State<ActivityScreen> with SingleTickerProvid
 
           // Danh sách giao dịch nhóm theo ngày
           Expanded(
-            child: _filtered.isEmpty
-                ? Center(child: Text('Không có giao dịch nào', style: TextStyle(color: textSecondary)))
-                : ListView(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    children: [
-                      for (final dateGroup in ['Hôm nay', 'Hôm qua', 'Chủ nhật']) ...[
-                        _buildDateHeading(dateGroup, textPrimary, textSecondary),
-                        ..._filtered.where((t) => t['date'] == dateGroup).map((t) =>
-                          _txCard(t, cardColor, textPrimary, textSecondary, accent, isDark)),
-                      ]
-                    ],
-                  ),
+            child: _isLoading 
+                ? const Center(child: CircularProgressIndicator())
+                : _filtered.isEmpty
+                    ? Center(child: Text('Không có giao dịch nào', style: TextStyle(color: textSecondary)))
+                    : ListView(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        children: _filtered.map((t) => _txCard(t, cardColor, textPrimary, textSecondary, accent, isDark)).toList(),
+                      ),
           ),
         ]),
       ),
@@ -477,8 +475,15 @@ class _ActivityScreenState extends State<ActivityScreen> with SingleTickerProvid
     );
   }
 
-  Widget _txCard(Map t, Color cardColor, Color textPrimary, Color textSecondary, Color accent, bool isDark) =>
-    Container(
+  Widget _txCard(dynamic t, Color cardColor, Color textPrimary, Color textSecondary, Color accent, bool isDark) {
+    final isIncome = (t['transaction_type'] ?? t['TransactionType']) == true;
+    final amount = double.tryParse(t['amount']?.toString() ?? '0') ?? 0;
+    final amountStr = '${isIncome ? "+" : "-"}${amount.toInt().toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.')}đ';
+    final dateStr = (t['transaction_date'] ?? t['TransactionDate'])?.toString().split('T')[0] ?? '';
+    final desc = t['description'] ?? t['Description'] ?? 'Giao dịch';
+    final catName = t['category_name'] ?? t['CategoryName'] ?? 'Danh mục';
+
+    return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -493,21 +498,22 @@ class _ActivityScreenState extends State<ActivityScreen> with SingleTickerProvid
               color: isDark ? const Color(0xFF1A1840) : const Color(0xFFEEEEFF),
               shape: BoxShape.circle,
             ),
-            child: Icon(_iconForCat(t['category']), color: accent, size: 20),
+            child: Icon(_iconForCat(catName), color: accent, size: 20),
           ),
           const SizedBox(width: 12),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(t['title'], style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: textPrimary)),
+            Text(desc, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: textPrimary)),
             const SizedBox(height: 2),
-            Text('${t['category']} • ${t['time']}', style: TextStyle(color: textSecondary, fontSize: 11)),
+            Text('$catName • $dateStr', style: TextStyle(color: textSecondary, fontSize: 11)),
           ])),
-          Text('${t['amount']}đ', style: TextStyle(
+          Text(amountStr, style: TextStyle(
             fontWeight: FontWeight.bold, fontSize: 14,
-            color: (t['isExpense'] as bool) ? const Color(0xFFFF5252) : const Color(0xFF00C096),
+            color: !isIncome ? const Color(0xFFFF5252) : const Color(0xFF00C096),
           )),
         ],
       ),
     );
+  }
 
   IconData _iconForCat(String cat) {
     switch (cat) {

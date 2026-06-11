@@ -1,7 +1,8 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'all_transactions_screen.dart';
 import 'package:flutter/services.dart';
 import '../models/jar_model.dart';
+import '../services/api_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -14,13 +15,15 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   late Animation<double> _fadeAnim;
   late Animation<Offset> _slideAnim;
 
-  // 1. Cập nhật danh sách Mock Data theo chuẩn JarModel mới
-  final List<JarModel> _jars = [
-    JarModel(jarId: '1', jarName: 'Tiền ăn', budget: 5000000, spentAmount: 3800000, createdByUserId: 'user_01', createdAt: DateTime.now()),
-    JarModel(jarId: '2', jarName: 'Đi chơi', budget: 2000000, spentAmount: 1150000, createdByUserId: 'user_01', createdAt: DateTime.now()),
-    JarModel(jarId: '3', jarName: 'Học tập', budget: 3500000, spentAmount: 500000, createdByUserId: 'user_01', createdAt: DateTime.now()),
-    JarModel(jarId: '4', jarName: 'Tiền nhà', budget: 5000000, spentAmount: 0, createdByUserId: 'user_01', createdAt: DateTime.now()),
-  ];
+  // 1. Danh sách Hũ và Dữ liệu sẽ được load từ API
+  List<JarModel> _jars = [];
+  List<dynamic> _recentTransactions = [];
+  double _totalBalance = 0;
+  double _totalIncome = 0;
+  double _totalExpense = 0;
+  double _savingRate = 0;
+  String _userName = 'Bạn';
+  bool _isLoading = true;
 
   // 2. Tách Icon và Color ra quản lý riêng ở UI (Vì Database chưa có 2 cột này)
   final Map<String, int> _jarIconMap = {'1': 0, '2': 1, '3': 2, '4': 3};
@@ -62,6 +65,32 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     _slideAnim = Tween<Offset>(begin: const Offset(0, 0.05), end: Offset.zero)
         .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
     _ctrl.forward();
+    _fetchData();
+  }
+
+  Future<void> _fetchData() async {
+    final me = await ApiService.getMe();
+    if (me != null && mounted) {
+      setState(() => _userName = me['full_name'] ?? 'Bạn');
+    }
+
+    final dashboardData = await ApiService.getDashboard();
+    if (mounted && dashboardData != null) {
+      setState(() {
+        _totalBalance = (dashboardData['total_balance'] ?? 0).toDouble();
+        _totalIncome = (dashboardData['total_income'] ?? 0).toDouble();
+        _totalExpense = (dashboardData['total_expense'] ?? 0).toDouble();
+        _savingRate = (dashboardData['saving_rate'] ?? 0).toDouble();
+        
+        final jarsList = dashboardData['jars'] as List<dynamic>? ?? [];
+        _jars = jarsList.map((e) => JarModel.fromJson(e)).toList();
+
+        _recentTransactions = dashboardData['recent_transactions'] as List<dynamic>? ?? [];
+        _isLoading = false;
+      });
+    } else {
+      setState(() => _isLoading = false);
+    }
   }
 
   @override
@@ -176,41 +205,25 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: () {
+                    onPressed: () async {
                       final title = titleCtrl.text.trim();
                       final limit = double.tryParse(limitCtrl.text.trim()) ?? 0;
                       final spent = double.tryParse(spentCtrl.text.trim()) ?? 0;
                       if (title.isEmpty) return;
                       Navigator.pop(ctx);
                       
-                      setState(() {
-                        if (existing == null) {
-                          // Thêm mới
-                          final newId = DateTime.now().millisecondsSinceEpoch.toString();
-                          _jars.add(JarModel(
-                            jarId: newId,
-                            jarName: title, 
-                            budget: limit, 
-                            spentAmount: spent,
-                            createdByUserId: 'user_01',
-                            createdAt: DateTime.now(),
-                          ));
-                          _jarIconMap[newId] = selectedIcon;
-                          _jarColorMap[newId] = selectedColor;
-                        } else {
-                          // 4. Sử dụng copyWith thay vì gán trực tiếp vì các field trong DB là final
-                          int index = _jars.indexWhere((j) => j.jarId == existing.jarId);
-                          if (index != -1) {
-                            _jars[index] = existing.copyWith(
-                              jarName: title,
-                              budget: limit,
-                              spentAmount: spent,
-                            );
-                            _jarIconMap[existing.jarId] = selectedIcon;
-                            _jarColorMap[existing.jarId] = selectedColor;
-                          }
-                        }
-                      });
+                      setState(() => _isLoading = true);
+                      
+                      if (existing == null) {
+                        // Thêm mới qua API
+                        await ApiService.createJar(title, limit, '1'); // 1 = Personal
+                      } else {
+                        // Cập nhật qua API
+                        await ApiService.updateJar(existing.jarId, title, limit, existing.jarType.value.toString());
+                      }
+                      
+                      // Load lại dữ liệu
+                      await _fetchData();
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: accent, foregroundColor: Colors.white,
@@ -239,13 +252,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Huỷ')),
           TextButton(
-            onPressed: () { 
+            onPressed: () async { 
               Navigator.pop(ctx); 
-              setState(() {
-                _jars.remove(jar); 
-                _jarIconMap.remove(jar.jarId);
-                _jarColorMap.remove(jar.jarId);
-              }); 
+              setState(() => _isLoading = true);
+              await ApiService.deleteJar(jar.jarId);
+              await _fetchData();
             },
             child: const Text('Xoá', style: TextStyle(color: Colors.redAccent)),
           ),
@@ -311,7 +322,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                         ),
                         const SizedBox(width: 12),
                         Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Text('Xin chào, Trần Văn Phát 👋',
+                          Text('Xin chào, $_userName 👋',
                               style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: textPrimary)),
                           Text('Thứ Ba, 10 Tháng 6',
                               style: TextStyle(fontSize: 12, color: textSecondary)),
@@ -335,15 +346,15 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                       const Text('TỔNG SỐ DƯ HIỆN TẠI',
                           style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.white70, letterSpacing: 1.2)),
                       const SizedBox(height: 10),
-                      const Text('85.450.000đ', style: TextStyle(fontSize: 34, fontWeight: FontWeight.bold, color: Colors.white)),
+                      Text('${_totalBalance.toInt().toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.')}đ', style: const TextStyle(fontSize: 34, fontWeight: FontWeight.bold, color: Colors.white)),
                       const SizedBox(height: 16),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                         decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.18), borderRadius: BorderRadius.circular(20)),
-                        child: const Row(mainAxisSize: MainAxisSize.min, children: [
-                          Icon(Icons.trending_up_rounded, color: Colors.white, size: 16),
-                          SizedBox(width: 6),
-                          Text('+12,5% tháng này', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          const Icon(Icons.trending_up_rounded, color: Colors.white, size: 16),
+                          const SizedBox(width: 6),
+                          Text('${_savingRate > 0 ? "+" : ""}${_savingRate}% tiết kiệm', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
                         ]),
                       ),
                     ]),
@@ -354,9 +365,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      _quickStat(context, Icons.trending_up_rounded, 'Thu nhập', '+15Tr', const Color(0xFF00C096), isDark ? const Color(0xFF0D3327) : const Color(0xFFE6F9F3), cardColor, textPrimary),
-                      _quickStat(context, Icons.trending_down_rounded, 'Chi tiêu', '-8,2Tr', const Color(0xFFFF5252), isDark ? const Color(0xFF3D1212) : const Color(0xFFFFF0F0), cardColor, textPrimary),
-                      _quickStat(context, Icons.account_balance_wallet_rounded, 'Tiết kiệm', '4,5Tr', accent, isDark ? const Color(0xFF1A1840) : const Color(0xFFEEEDFF), cardColor, textPrimary),
+                      _quickStat(context, Icons.trending_up_rounded, 'Thu nhập', '+${(_totalIncome/1000000).toStringAsFixed(1)}Tr', const Color(0xFF00C096), isDark ? const Color(0xFF0D3327) : const Color(0xFFE6F9F3), cardColor, textPrimary),
+                      _quickStat(context, Icons.trending_down_rounded, 'Chi tiêu', '-${(_totalExpense/1000000).toStringAsFixed(1)}Tr', const Color(0xFFFF5252), isDark ? const Color(0xFF3D1212) : const Color(0xFFFFF0F0), cardColor, textPrimary),
+                      _quickStat(context, Icons.account_balance_wallet_rounded, 'Tiết kiệm', '${(_savingRate)}%', accent, isDark ? const Color(0xFF1A1840) : const Color(0xFFEEEDFF), cardColor, textPrimary),
                     ],
                   ),
                   const SizedBox(height: 32),
@@ -409,9 +420,19 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     ],
                   ),
                   const SizedBox(height: 12),
-                  _txRow('Siêu thị WinMart', 'Hôm nay • 14:30', '-245.000đ', Icons.shopping_cart_rounded, true, cardColor, textPrimary, textSecondary, isDark),
-                  const SizedBox(height: 12),
-                  _txRow('Starbucks Coffee', 'Hôm qua • 09:15', '-65.000đ', Icons.coffee_rounded, true, cardColor, textPrimary, textSecondary, isDark),
+                  if (_recentTransactions.isEmpty)
+                    Center(child: Padding(padding: const EdgeInsets.all(20), child: Text("Chưa có giao dịch", style: TextStyle(color: textSecondary)))),
+                  ..._recentTransactions.map((tx) {
+                    final isIncome = (tx['transaction_type'] ?? tx['TransactionType']) == true;
+                    final amount = double.tryParse(tx['amount']?.toString() ?? '0') ?? 0;
+                    final amountStr = '${isIncome ? "+" : "-"}${amount.toInt().toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.')}đ';
+                    final dateStr = (tx['transaction_date'] ?? tx['TransactionDate'])?.toString().split('T')[0] ?? '';
+                    final desc = tx['description'] ?? tx['Description'] ?? 'Giao dịch';
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: _txRow(desc, dateStr, amountStr, isIncome ? Icons.trending_up_rounded : Icons.shopping_cart_rounded, !isIncome, cardColor, textPrimary, textSecondary, isDark),
+                    );
+                  }).toList(),
                   const SizedBox(height: 24),
                 ],
               ),

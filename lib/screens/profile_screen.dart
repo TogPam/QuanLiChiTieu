@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../controllers/theme_controller.dart';
 import '../services/notification_service.dart';
+import '../services/api_service.dart';
 import 'notification_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -16,10 +17,13 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
   late Animation<double> _fadeAnim;
   late Animation<Offset> _slideAnim;
 
-  String _displayName = 'Trần Văn Phát';
-  String _email = 'tranvanphat@lumiere.com';
+  String _displayName = 'Đang tải...';
+  String _email = '...';
+  double _totalBalance = 0;
+  double _savingRate = 0;
   File? _avatarFile;
   int _unreadCount = 0;
+  bool _isLoading = true;
 
   @override
   void initState() {
@@ -29,12 +33,28 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
     _slideAnim = Tween<Offset>(begin: const Offset(0, 0.06), end: Offset.zero)
         .animate(CurvedAnimation(parent: _animController, curve: Curves.easeOut));
     _animController.forward();
-    _loadUnread();
+    _loadData();
   }
 
-  Future<void> _loadUnread() async {
+  Future<void> _loadData() async {
     final count = await NotificationService.instance.unreadCount();
-    if (mounted) setState(() => _unreadCount = count);
+    final me = await ApiService.getMe();
+    final db = await ApiService.getDashboard();
+    
+    if (mounted) {
+      setState(() {
+        _unreadCount = count;
+        if (me != null) {
+          _displayName = me['full_name'] ?? 'Không tên';
+          _email = me['email'] ?? '';
+        }
+        if (db != null) {
+          _totalBalance = (db['total_balance'] ?? 0).toDouble();
+          _savingRate = (db['saving_rate'] ?? 0).toDouble();
+        }
+        _isLoading = false;
+      });
+    }
   }
 
   @override
@@ -147,12 +167,19 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx), child: Text('Huỷ', style: TextStyle(color: textSecondary))),
             ElevatedButton(
-              onPressed: () {
+              onPressed: () async {
                 final name = nameCtrl.text.trim();
+                final email = emailCtrl.text.trim();
                 if (name.isEmpty) return;
                 Navigator.pop(ctx);
-                setState(() { _displayName = name; _email = emailCtrl.text.trim(); });
-                NotificationService.instance.setUser(name);
+                
+                setState(() => _isLoading = true);
+                final res = await ApiService.updateMe(name, email);
+                if (res != null) {
+                  setState(() { _displayName = name; _email = email; });
+                  NotificationService.instance.setUser(name);
+                }
+                setState(() => _isLoading = false);
               },
               style: ElevatedButton.styleFrom(backgroundColor: accent, foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), elevation: 0),
@@ -186,7 +213,7 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                 icon: Icon(Icons.notifications_none_rounded, color: textPrimary),
                 onPressed: () async {
                   await Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationScreen()));
-                  _loadUnread();
+                  _loadData();
                 },
               ),
               if (_unreadCount > 0)
@@ -253,9 +280,14 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
 
               // Thẻ thông tin
               Row(children: [
-                Expanded(child: _infoCard('TÀI SẢN RÒNG', '1.240.500đ', '+2,4%', const Color(0xFF00C096), cardColor, textPrimary, textSecondary)),
+                Expanded(child: _infoCard(
+                  'TÀI SẢN RÒNG', 
+                  '${_totalBalance.toInt().toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.')}đ', 
+                  '${_savingRate > 0 ? "+" : ""}${_savingRate}%', 
+                  const Color(0xFF00C096), cardColor, textPrimary, textSecondary
+                )),
                 const SizedBox(width: 14),
-                Expanded(child: _infoCard('GÓI DỊCH VỤ', 'Premium Elite', 'Hết hạn: 24/10', accent, cardColor, textPrimary, textSecondary)),
+                Expanded(child: _infoCard('GÓI DỊCH VỤ', 'Miễn phí', 'Vĩnh viễn', accent, cardColor, textPrimary, textSecondary)),
               ]),
               const SizedBox(height: 32),
 

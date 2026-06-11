@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:quan_li_chi_tieu/login_screens/navigation_screen.dart';
 import 'register_screen.dart';
 import '../services/notification_service.dart';
-
+import '../services/api_service.dart';
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -29,23 +29,30 @@ class _LoginScreenState extends State<LoginScreen> {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
 
-    if (email == 'admin@gmail.com' && password == '123456') {
-      setState(() => _isLoading = true);
-      await Future.delayed(const Duration(milliseconds: 600));
-      if (!mounted) return;
+    setState(() => _isLoading = true);
+    
+    final result = await ApiService.login(email, password);
+    
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+
+    if (result['success'] == true) {
+      final user = result['user'];
+      final fullName = user['full_name'] ?? 'Bạn';
 
       // Lưu thông báo chào mừng
-      NotificationService.instance.setUser('admin');
-      await NotificationService.instance.addWelcome('Admin');
+      NotificationService.instance.setUser(email);
+      await NotificationService.instance.addWelcome(fullName);
 
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => const MainNavigationScreen()),
       );
     } else {
+      final errorMsg = result['message'] ?? 'Lỗi đăng nhập';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('Email hoặc mật khẩu không đúng'),
+          content: Text(errorMsg),
           behavior: SnackBarBehavior.floating,
           backgroundColor: Colors.redAccent,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),

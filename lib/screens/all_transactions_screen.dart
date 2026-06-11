@@ -1,5 +1,6 @@
 // screens/all_transactions_screen.dart
 import 'package:flutter/material.dart';
+import '../services/api_service.dart';
 
 class AllTransactionsScreen extends StatefulWidget {
   const AllTransactionsScreen({super.key});
@@ -16,26 +17,12 @@ class _AllTransactionsScreenState extends State<AllTransactionsScreen>
   final TextEditingController _searchCtrl = TextEditingController();
   String _searchText = '';
 
-  final List<Map<String, dynamic>> _allTransactions = [
-    {'title': 'Tiệm bánh mì Như Lan', 'category': 'Ăn uống', 'time': '09:12 SA', 'date': '11/06/2025', 'amount': -32000, 'isExpense': true},
-    {'title': 'Lương tháng 6', 'category': 'Thu nhập', 'time': '08:00 SA', 'date': '11/06/2025', 'amount': 8000000, 'isExpense': false},
-    {'title': 'Netflix', 'category': 'Giải trí', 'time': '11:45 CH', 'date': '10/06/2025', 'amount': -180000, 'isExpense': true},
-    {'title': 'Khoá học Udemy', 'category': 'Học tập', 'time': '02:30 CH', 'date': '10/06/2025', 'amount': -450000, 'isExpense': true},
-    {'title': 'Tiền thuê phòng', 'category': 'Tiền nhà', 'time': '10:00 SA', 'date': '09/06/2025', 'amount': -3500000, 'isExpense': true},
-    {'title': 'Siêu thị Vinmart', 'category': 'Ăn uống', 'time': '05:10 CH', 'date': '08/06/2025', 'amount': -215000, 'isExpense': true},
-    {'title': 'Thưởng dự án', 'category': 'Thu nhập', 'time': '03:00 CH', 'date': '07/06/2025', 'amount': 2000000, 'isExpense': false},
-    {'title': 'Cà phê Highlands', 'category': 'Ăn uống', 'time': '08:30 SA', 'date': '07/06/2025', 'amount': -65000, 'isExpense': true},
-    {'title': 'Đổ xăng', 'category': 'Di chuyển', 'time': '07:00 SA', 'date': '06/06/2025', 'amount': -120000, 'isExpense': true},
-    {'title': 'Mua sách lập trình', 'category': 'Học tập', 'time': '04:00 CH', 'date': '05/06/2025', 'amount': -250000, 'isExpense': true},
-    {'title': 'Điện tháng 6', 'category': 'Tiện ích', 'time': '09:00 SA', 'date': '04/06/2025', 'amount': -380000, 'isExpense': true},
-    {'title': 'Internet FPT', 'category': 'Tiện ích', 'time': '09:00 SA', 'date': '04/06/2025', 'amount': -250000, 'isExpense': true},
-    {'title': 'Xem phim rạp', 'category': 'Giải trí', 'time': '07:30 CH', 'date': '03/06/2025', 'amount': -170000, 'isExpense': true},
-    {'title': 'Grab đi làm', 'category': 'Di chuyển', 'time': '08:00 SA', 'date': '02/06/2025', 'amount': -45000, 'isExpense': true},
-  ];
+  List<dynamic> _allTransactions = [];
+  bool _isLoading = true;
 
   final _categories = ['Tất cả', 'Ăn uống', 'Thu nhập', 'Giải trí', 'Học tập', 'Tiền nhà', 'Di chuyển', 'Tiện ích'];
 
-  List<Map<String, dynamic>> get _filtered {
+  List<dynamic> get _filtered {
     return _allTransactions.where((t) {
       final catOk = _selectedCategory == 'Tất cả' || t['category'] == _selectedCategory;
       final searchOk = _searchText.isEmpty ||
@@ -44,8 +31,8 @@ class _AllTransactionsScreenState extends State<AllTransactionsScreen>
     }).toList();
   }
 
-  Map<String, List<Map<String, dynamic>>> get _grouped {
-    final map = <String, List<Map<String, dynamic>>>{};
+  Map<String, List<dynamic>> get _grouped {
+    final map = <String, List<dynamic>>{};
     for (final t in _filtered) {
       (map[t['date']] ??= []).add(t);
     }
@@ -59,6 +46,37 @@ class _AllTransactionsScreenState extends State<AllTransactionsScreen>
     _fadeAnim = CurvedAnimation(parent: _ctrl, curve: Curves.easeOut);
     _ctrl.forward();
     _searchCtrl.addListener(() => setState(() => _searchText = _searchCtrl.text));
+    _fetchData();
+  }
+
+  Future<void> _fetchData() async {
+    setState(() => _isLoading = true);
+    final data = await ApiService.getTransactions(limit: 500);
+    if (data != null && mounted) {
+      setState(() {
+        _allTransactions = data.map((t) {
+           final isExpense = (t['transaction_type'] ?? t['TransactionType']) == false;
+           final amt = double.parse((t['amount'] ?? t['Amount'] ?? 0).toString()).toInt();
+           var timeStr = '';
+           var dateStr = '';
+           final rawDate = (t['transaction_date'] ?? t['TransactionDate'])?.toString() ?? '';
+           if (rawDate.isNotEmpty) {
+             final parts = rawDate.split('T');
+             dateStr = parts[0];
+             if (parts.length > 1) timeStr = parts[1].substring(0, 5);
+           }
+           return {
+             'title': t['description'] ?? t['Description'] ?? 'Giao dịch',
+             'category': t['category_name'] ?? t['CategoryName'] ?? 'Khác',
+             'time': timeStr,
+             'date': dateStr,
+             'amount': isExpense ? -amt : amt,
+             'isExpense': isExpense,
+           };
+        }).toList();
+        _isLoading = false;
+      });
+    }
   }
 
   @override
@@ -207,7 +225,9 @@ class _AllTransactionsScreenState extends State<AllTransactionsScreen>
 
             // Danh sách giao dịch
             Expanded(
-              child: _filtered.isEmpty
+              child: _isLoading 
+                ? const Center(child: CircularProgressIndicator())
+                : _filtered.isEmpty
                   ? Center(
                       child: Text('Không có giao dịch nào',
                           style: TextStyle(color: textSecondary, fontSize: 15)),
