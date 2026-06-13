@@ -1,5 +1,6 @@
 // screens/register_screen.dart
 import 'package:flutter/material.dart';
+import '../services/api_service.dart';
 import 'login_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -44,19 +45,37 @@ class _RegisterScreenState extends State<RegisterScreen>
   Future<void> _handleRegister() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
-    await Future.delayed(const Duration(milliseconds: 1200));
+    
+    final result = await ApiService.register(
+      _nameCtrl.text.trim(),
+      _emailCtrl.text.trim(),
+      _passCtrl.text,
+    );
+    
     if (!mounted) return;
     setState(() => _isLoading = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('Đăng ký thành công! Vui lòng đăng nhập.'),
-        backgroundColor: const Color(0xFF00C096),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      ),
-    );
-    Navigator.pushReplacement(
-        context, MaterialPageRoute(builder: (_) => const LoginScreen()));
+    
+    if (result['success'] == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Đăng ký thành công! Vui lòng đăng nhập.'),
+          backgroundColor: const Color(0xFF00C096),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        ),
+      );
+      Navigator.pushReplacement(
+          context, MaterialPageRoute(builder: (_) => const LoginScreen()));
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result['message'] ?? 'Đã có lỗi xảy ra'),
+          backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        ),
+      );
+    }
   }
 
   @override

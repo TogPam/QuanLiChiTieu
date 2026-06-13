@@ -20,6 +20,10 @@ class _AnalysisScreenState extends State<AnalysisScreen>
   int _totalJarsCount = 0;
   bool _isLoading = true;
 
+  List<dynamic> _jars = [];
+  List<dynamic> _monthlySummaries = [];
+  List<dynamic> _categoriesData = [];
+
   @override
   void initState() {
     super.initState();
@@ -35,12 +39,37 @@ class _AnalysisScreenState extends State<AnalysisScreen>
   Future<void> _fetchData() async {
     setState(() => _isLoading = true);
     final db = await ApiService.getDashboard();
-    if (db != null && mounted) {
+    final summaries = await ApiService.getMonthlySummary(DateTime.now().year);
+    final txs = await ApiService.getTransactions(month: DateTime.now().month, year: DateTime.now().year, limit: 500);
+
+    if (mounted) {
       setState(() {
-         _savingRate = (db['saving_rate'] ?? 0).toDouble();
-         _totalExpense = (db['total_expense'] ?? 0).toDouble();
-         final jarsList = db['jars'] as List<dynamic>? ?? [];
-         _totalJarsCount = jarsList.length;
+         if (db != null) {
+           _savingRate = (db['saving_rate'] ?? 0).toDouble();
+           _totalExpense = (db['total_expense'] ?? 0).toDouble();
+           _jars = db['jars'] as List<dynamic>? ?? [];
+           _totalJarsCount = _jars.length;
+         }
+         _monthlySummaries = summaries ?? [];
+
+         // Group transactions by category
+         if (txs != null) {
+           final Map<String, Map<String, dynamic>> catMap = {};
+           for (var t in txs) {
+             final isIncome = t['transaction_type'] == true || t['TransactionType'] == true;
+             if (isIncome) continue; // Only expense
+             final catName = t['category_name'] ?? t['CategoryName'] ?? 'Khác';
+             final amount = double.tryParse(t['amount']?.toString() ?? '0') ?? 0;
+             if (!catMap.containsKey(catName)) {
+               catMap[catName] = {'name': catName, 'amount': 0.0, 'count': 0};
+             }
+             catMap[catName]!['amount'] += amount;
+             catMap[catName]!['count'] += 1;
+           }
+           _categoriesData = catMap.values.toList();
+           _categoriesData.sort((a, b) => b['amount'].compareTo(a['amount']));
+         }
+
          _isLoading = false;
       });
     }
@@ -138,13 +167,13 @@ class _AnalysisScreenState extends State<AnalysisScreen>
                             height: 160,
                             width: 160,
                             child: CustomPaint(
-                              painter: DonutChartPainter(isDark: isDark),
+                              painter: DonutChartPainter(isDark: isDark, jars: _jars),
                               child: Center(
                                 child: Column(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
                                     Text(
-                                      '4.250',
+                                      '$_totalJarsCount',
                                       style: TextStyle(
                                           fontSize: 24,
                                           fontWeight: FontWeight.bold,
@@ -170,24 +199,18 @@ class _AnalysisScreenState extends State<AnalysisScreen>
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
                         childAspectRatio: 3.5,
-                        children: [
-                          _buildLegendItem(
-                              color: const Color(0xFF4B49EB),
-                              label: 'Tiền nhà (40%)',
-                              textSecondary: textSecondary),
-                          _buildLegendItem(
-                              color: const Color(0xFF00C096),
-                              label: 'Ăn uống (25%)',
-                              textSecondary: textSecondary),
-                          _buildLegendItem(
-                              color: const Color(0xFFE63946),
-                              label: 'Đi chơi (20%)',
-                              textSecondary: textSecondary),
-                          _buildLegendItem(
-                              color: const Color(0xFF457B9D),
-                              label: 'Học tập (15%)',
-                              textSecondary: textSecondary),
-                        ],
+                        children: _jars.isEmpty ? [
+                          _buildLegendItem(color: const Color(0xFF4B49EB), label: 'Chưa có dữ liệu', textSecondary: textSecondary)
+                        ] : _jars.take(4).toList().asMap().entries.map((e) {
+                          final idx = e.key;
+                          final j = e.value;
+                          final total = _jars.fold(0.0, (s, x) => s + (x['budget'] ?? x['TargetAmount'] ?? 0));
+                          final budget = (j['budget'] ?? j['TargetAmount'] ?? 0).toDouble();
+                          final pct = total > 0 ? (budget / total * 100).toInt() : 0;
+                          final name = j['jar_name'] ?? j['JarName'] ?? '';
+                          final colors = [const Color(0xFF4B49EB), const Color(0xFF00C096), const Color(0xFFE63946), const Color(0xFF457B9D)];
+                          return _buildLegendItem(color: colors[idx % colors.length], label: '$name ($pct%)', textSecondary: textSecondary);
+                        }).toList(),
                       ),
                     ],
                   ),
@@ -331,13 +354,19 @@ class _AnalysisScreenState extends State<AnalysisScreen>
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                           crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
+                          children: _monthlySummaries.isEmpty ? [
                             _buildBarGroup('T6', 0.8, 0.4, isDark),
                             _buildBarGroup('T5', 0.5, 0.6, isDark),
                             _buildBarGroup('T4', 0.7, 0.3, isDark),
                             _buildBarGroup('T3', 0.6, 0.5, isDark),
                             _buildBarGroup('T2', 0.9, 0.2, isDark),
-                          ],
+                          ] : _monthlySummaries.take(6).toList().reversed.map((s) {
+                             final inc = (s['total_income'] ?? 0).toDouble();
+                             final exp = (s['total_expense'] ?? 0).toDouble();
+                             final m = s['month'];
+                             final maxVal = math.max(1.0, math.max(inc, exp) * 1.2);
+                             return _buildBarGroup('T$m', inc / maxVal, exp / maxVal, isDark);
+                           }).toList(),
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -367,15 +396,23 @@ class _AnalysisScreenState extends State<AnalysisScreen>
                         fontWeight: FontWeight.bold,
                         color: textPrimary)),
                 const SizedBox(height: 12),
-                _buildCategoryRow('Ăn uống & Nhà hàng', '12 giao dịch',
-                    '1.062.500đ', const Color(0xFF4B49EB), 0.75, cardColor,
-                    textPrimary, textSecondary, isDark),
-                _buildCategoryRow('Giải trí', '8 giao dịch', '850.000đ',
-                    const Color(0xFFFF5252), 0.60, cardColor, textPrimary,
-                    textSecondary, isDark),
-                _buildCategoryRow('Khoá học online', '3 giao dịch', '637.500đ',
-                    const Color(0xFF00C096), 0.45, cardColor, textPrimary,
-                    textSecondary, isDark),
+                if (_categoriesData.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 20),
+                    child: Text('Không có dữ liệu chi tiêu tháng này', style: TextStyle(color: textSecondary)),
+                  )
+                else
+                  ..._categoriesData.map((c) {
+                    final idx = _categoriesData.indexOf(c);
+                    final name = c['name'];
+                    final count = c['count'];
+                    final amount = c['amount'];
+                    final colors = [const Color(0xFF4B49EB), const Color(0xFFFF5252), const Color(0xFF00C096), const Color(0xFFFFAB00), const Color(0xFFB5179E)];
+                    final col = colors[idx % colors.length];
+                    final totalExp = math.max(1.0, _totalExpense);
+                    return _buildCategoryRow(name, '$count giao dịch', '${amount.toInt().toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.')}đ',
+                      col, amount / totalExp, cardColor, textPrimary, textSecondary, isDark);
+                  }).toList(),
               ],
             ),
           ),
@@ -588,7 +625,8 @@ class _AnalysisScreenState extends State<AnalysisScreen>
 // ── Custom Painter – Biểu đồ Donut ───────────────────────────────────────
 class DonutChartPainter extends CustomPainter {
   final bool isDark;
-  const DonutChartPainter({required this.isDark});
+  final List<dynamic> jars;
+  const DonutChartPainter({required this.isDark, required this.jars});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -607,7 +645,8 @@ class DonutChartPainter extends CustomPainter {
 
     final rect =
         Rect.fromCircle(center: center, radius: radius - strokeWidth / 2);
-    final values = [0.4, 0.25, 0.20, 0.15];
+    final total = jars.fold(0.0, (s, x) => s + (x['budget'] ?? x['TargetAmount'] ?? 0));
+    final values = jars.isEmpty ? [1.0] : jars.map((j) => total > 0 ? (j['budget'] ?? j['TargetAmount'] ?? 0) / total : 0.0).toList();
     final colors = [
       const Color(0xFF4B49EB),
       const Color(0xFF00C096),
@@ -619,7 +658,7 @@ class DonutChartPainter extends CustomPainter {
     for (int i = 0; i < values.length; i++) {
       final sweepAngle = values[i] * 2 * math.pi;
       final paintArc = Paint()
-        ..color = colors[i]
+        ..color = colors[i % colors.length]
         ..strokeWidth = strokeWidth
         ..style = PaintingStyle.stroke
         ..strokeCap = StrokeCap.round;

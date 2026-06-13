@@ -6,6 +6,7 @@ import '../screens/analysis_screen.dart';
 import '../screens/activity_screen.dart';
 import '../screens/vault_screen.dart';
 import '../screens/profile_screen.dart';
+import '../services/api_service.dart';
 
 class MainNavigationScreen extends StatefulWidget {
   const MainNavigationScreen({super.key});
@@ -29,13 +30,77 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
   ];
 
   bool _isPopupShowing = false;
+  List<Map<String, dynamic>> _jars = [];
+  int _defaultCategoryId = 1;
 
-  final List<Map<String, dynamic>> _jars = [
-    {'id': '1', 'name': 'Tiền ăn', 'icon': Icons.restaurant_rounded, 'color': const Color(0xFFFF7A00)},
-    {'id': '2', 'name': 'Đi chơi', 'icon': Icons.celebration_rounded, 'color': const Color(0xFFB5179E)},
-    {'id': '3', 'name': 'Học tập', 'icon': Icons.school_rounded, 'color': const Color(0xFF4361EE)},
-    {'id': '4', 'name': 'Tiền nhà', 'icon': Icons.home_work_rounded, 'color': const Color(0xFF00C096)},
-  ];
+  IconData getJarIcon(String jarName) {
+    final name = jarName.toLowerCase();
+    if (name.contains('ăn') || name.contains('food') || name.contains('uống')) {
+      return Icons.restaurant_rounded;
+    } else if (name.contains('chơi') || name.contains('du lịch') || name.contains('play') || name.contains('travel')) {
+      return Icons.celebration_rounded;
+    } else if (name.contains('học') || name.contains('study') || name.contains('sách')) {
+      return Icons.school_rounded;
+    } else if (name.contains('nhà') || name.contains('thuê') || name.contains('rent') || name.contains('home')) {
+      return Icons.home_work_rounded;
+    } else if (name.contains('mua') || name.contains('shop')) {
+      return Icons.shopping_bag_rounded;
+    } else if (name.contains('xe') || name.contains('car') || name.contains('di chuyển')) {
+      return Icons.directions_car_rounded;
+    } else if (name.contains('y tế') || name.contains('khỏe') || name.contains('health') || name.contains('thuốc')) {
+      return Icons.medical_services_rounded;
+    } else {
+      return Icons.savings_rounded;
+    }
+  }
+
+  Color getJarColor(String jarName) {
+    final name = jarName.toLowerCase();
+    if (name.contains('ăn') || name.contains('food') || name.contains('uống')) {
+      return const Color(0xFFFF7A00);
+    } else if (name.contains('chơi') || name.contains('du lịch') || name.contains('play') || name.contains('travel')) {
+      return const Color(0xFFB5179E);
+    } else if (name.contains('học') || name.contains('study') || name.contains('sách')) {
+      return const Color(0xFF4361EE);
+    } else if (name.contains('nhà') || name.contains('thuê') || name.contains('rent') || name.contains('home')) {
+      return const Color(0xFF00C096);
+    } else if (name.contains('mua') || name.contains('shop')) {
+      return const Color(0xFFE63946);
+    } else if (name.contains('xe') || name.contains('car') || name.contains('di chuyển')) {
+      return const Color(0xFF457B9D);
+    } else if (name.contains('y tế') || name.contains('khỏe') || name.contains('health') || name.contains('thuốc')) {
+      return const Color(0xFFFFAB00);
+    } else {
+      return const Color(0xFF7B2FBE);
+    }
+  }
+
+  Future<void> _fetchJars() async {
+    try {
+      final jarsList = await ApiService.getJars();
+      if (jarsList != null && mounted) {
+        setState(() {
+          _jars = jarsList.map((e) {
+            final jarName = (e['jar_name'] ?? e['JarName'] ?? '') as String;
+            final jarId = (e['jar_id'] ?? e['JarId'] ?? '') as String;
+            return {
+              'id': jarId,
+              'name': jarName,
+              'icon': getJarIcon(jarName),
+              'color': getJarColor(jarName),
+            };
+          }).toList();
+        });
+      }
+      final cats = await ApiService.getCategories(isIncome: false);
+      if (cats != null && cats.isNotEmpty) {
+        final firstCat = cats.first;
+        _defaultCategoryId = (firstCat['category_id'] ?? firstCat['CategoryId'] ?? 1) as int;
+      }
+    } catch (e) {
+      debugPrint("Error fetching jars/categories in NavigationScreen: $e");
+    }
+  }
 
   @override
   void initState() {
@@ -50,6 +115,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
       curve: Curves.easeInOut,
     );
     _fadeController.forward();
+    _fetchJars();
   }
 
   @override
@@ -71,7 +137,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       if (!_isPopupShowing) {
-        _showResumeCameraPopup();
+        _fetchJars().then((_) {
+          if (_jars.isNotEmpty) {
+            _showResumeCameraPopup();
+          }
+        });
       }
     }
   }
@@ -206,10 +276,56 @@ class _MainNavigationScreenState extends State<MainNavigationScreen>
             child: const Text('Bỏ qua', style: TextStyle(color: Colors.grey)),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
+              final amountStr = amountCtrl.text.trim();
+              final descStr = descCtrl.text.trim();
+              if (amountStr.isEmpty) {
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  const SnackBar(content: Text('Vui lòng nhập số tiền')),
+                );
+                return;
+              }
+              final amount = double.tryParse(amountStr) ?? 0.0;
+              if (amount <= 0) {
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  const SnackBar(content: Text('Số tiền phải lớn hơn 0')),
+                );
+                return;
+              }
+
               Navigator.pop(ctx);
               _isPopupShowing = false;
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Lưu giao dịch thành công!')));
+
+              final result = await ApiService.createTransaction(
+                jar['id'] as String,
+                _defaultCategoryId,
+                amount,
+                descStr.isNotEmpty ? descStr : "Giao dịch nhanh từ camera",
+                false, // Chi tiêu (Expense)
+                DateTime.now().toIso8601String(),
+              );
+
+              if (result != null) {
+                final transactionId = result['transaction_id'] as String;
+                await ApiService.uploadTransactionReceipt(transactionId, image.path);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Đã ghi chi ${amount.toInt()}đ vào hũ ${jar['name']}'),
+                      backgroundColor: const Color(0xFF00C096),
+                    ),
+                  );
+                }
+              } else {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Lỗi khi tạo giao dịch nhanh'),
+                      backgroundColor: Colors.redAccent,
+                    ),
+                  );
+                }
+              }
             },
             style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF4B49EB), foregroundColor: Colors.white),
             child: const Text('Lưu'),

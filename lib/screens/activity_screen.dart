@@ -23,6 +23,7 @@ class _ActivityScreenState extends State<ActivityScreen> with SingleTickerProvid
 
   List<dynamic> _transactions = [];
   List<dynamic> _jars = [];
+  List<dynamic> _categoriesList = [];
   bool _isLoading = true;
 
   final _categories = ['Tất cả', 'Ăn uống', 'Thu nhập', 'Giải trí', 'Học tập', 'Tiền nhà'];
@@ -43,11 +44,13 @@ class _ActivityScreenState extends State<ActivityScreen> with SingleTickerProvid
     setState(() => _isLoading = true);
     final txs = await ApiService.getTransactions(month: _selectedMonth, year: _selectedYear);
     final jarsData = await ApiService.getJars();
+    final cats = await ApiService.getCategories(isIncome: false);
     
     if (mounted) {
       setState(() {
         _transactions = txs ?? [];
         _jars = jarsData ?? [];
+        _categoriesList = cats ?? [];
         _isLoading = false;
       });
     }
@@ -150,6 +153,10 @@ class _ActivityScreenState extends State<ActivityScreen> with SingleTickerProvid
     final amountCtrl = TextEditingController();
     final descCtrl = TextEditingController();
     String? selectedJarId;
+    int? selectedCatId;
+    if (_categoriesList.isNotEmpty) {
+      selectedCatId = _categoriesList.first['category_id'] as int;
+    }
     File? selectedImage;
     final picker = ImagePicker();
 
@@ -262,6 +269,43 @@ class _ActivityScreenState extends State<ActivityScreen> with SingleTickerProvid
                 ),
                 const SizedBox(height: 16),
 
+                // Chọn Danh mục
+                Text('Danh mục chi tiêu', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: textSecondary)),
+                const SizedBox(height: 10),
+                SizedBox(
+                  height: 50,
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: _categoriesList.length,
+                    itemBuilder: (_, i) {
+                      final cat = _categoriesList[i];
+                      final catId = cat['category_id'] as int;
+                      final catName = cat['category_name'] as String;
+                      final isSelected = selectedCatId == catId;
+                      return GestureDetector(
+                        onTap: () => setModalState(() => selectedCatId = catId),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          margin: const EdgeInsets.only(right: 12),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: isSelected ? accent : (isDark ? const Color(0xFF2A2940) : const Color(0xFFF2F2F7)),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: isSelected ? accent : Colors.transparent, width: 2),
+                          ),
+                          child: Center(
+                            child: Text(catName, style: TextStyle(
+                              color: isSelected ? Colors.white : textPrimary, 
+                              fontWeight: FontWeight.w600, fontSize: 13,
+                            )),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 16),
+
                 // Nhập mô tả
                 TextField(
                   controller: descCtrl,
@@ -328,12 +372,16 @@ class _ActivityScreenState extends State<ActivityScreen> with SingleTickerProvid
                       
                       await ApiService.createTransaction(
                         selectedJarId!, 
-                        1.toString(), // Default Category ID
+                        selectedCatId ?? 1, // Sử dụng category đã chọn
                         double.parse(amountStr), 
                         desc, 
                         false, // isIncome
                         null
-                      );
+                      ).then((res) async {
+                        if (res != null && selectedImage != null) {
+                          await ApiService.uploadTransactionReceipt(res['transaction_id'], selectedImage!.path);
+                        }
+                      });
                       
                       _fetchData();
                       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Thêm giao dịch thành công!')));
