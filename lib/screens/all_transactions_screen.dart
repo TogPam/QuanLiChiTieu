@@ -72,6 +72,7 @@ class _AllTransactionsScreenState extends State<AllTransactionsScreen>
              'date': dateStr,
              'amount': isExpense ? -amt : amt,
              'isExpense': isExpense,
+             'raw': t,
            };
         }).toList();
         _isLoading = false;
@@ -232,8 +233,12 @@ class _AllTransactionsScreenState extends State<AllTransactionsScreen>
                       child: Text('Không có giao dịch nào',
                           style: TextStyle(color: textSecondary, fontSize: 15)),
                     )
-                  : ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  : RefreshIndicator(
+                      onRefresh: _fetchData,
+                      color: accent,
+                      child: ListView.builder(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       itemCount: dates.length,
                       itemBuilder: (ctx, di) {
                         final date = dates[di];
@@ -249,21 +254,23 @@ class _AllTransactionsScreenState extends State<AllTransactionsScreen>
                                       fontSize: 15,
                                       color: textPrimary)),
                             ),
-                            ...txList.map((t) => Container(
-                                  margin: const EdgeInsets.only(bottom: 10),
-                                  padding: const EdgeInsets.all(14),
-                                  decoration: BoxDecoration(
-                                    color: cardColor,
-                                    borderRadius: BorderRadius.circular(18),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
-                                        blurRadius: 8,
-                                        offset: const Offset(0, 3),
-                                      ),
-                                    ],
-                                  ),
-                                  child: Row(
+                            ...txList.map((t) => GestureDetector(
+                                  onTap: () => _showTransactionDetails(t['raw'], isDark, cardColor, textPrimary, textSecondary, accent),
+                                  child: Container(
+                                    margin: const EdgeInsets.only(bottom: 10),
+                                    padding: const EdgeInsets.all(14),
+                                    decoration: BoxDecoration(
+                                      color: cardColor,
+                                      borderRadius: BorderRadius.circular(18),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
+                                          blurRadius: 8,
+                                          offset: const Offset(0, 3),
+                                        ),
+                                      ],
+                                    ),
+                                    child: Row(
                                     children: [
                                       Container(
                                         padding: const EdgeInsets.all(10),
@@ -302,11 +309,12 @@ class _AllTransactionsScreenState extends State<AllTransactionsScreen>
                                       ),
                                     ],
                                   ),
-                                )),
+                                ))).toList(),
                           ],
                         );
                       },
                     ),
+                  ),
             ),
           ],
         ),
@@ -338,5 +346,120 @@ class _AllTransactionsScreenState extends State<AllTransactionsScreen>
       case 'Tiện ích': return Icons.bolt_rounded;
       default: return Icons.credit_card_rounded;
     }
+  }
+
+  void _showTransactionDetails(dynamic t, bool isDark, Color cardBg, Color textPrimary, Color textSecondary, Color accent) {
+    final isIncome = (t['transaction_type'] ?? t['TransactionType']) == true;
+    final amount = double.tryParse(t['amount']?.toString() ?? '0') ?? 0;
+    final amountStr = '${isIncome ? "+" : "-"}${amount.toInt().toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.')}đ';
+    
+    final rawDate = (t['transaction_date'] ?? t['TransactionDate'])?.toString() ?? '';
+    var dateStr = '';
+    var timeStr = '';
+    if (rawDate.isNotEmpty) {
+      final parts = rawDate.split('T');
+      dateStr = parts[0];
+      if (parts.length > 1) {
+        timeStr = parts[1].split('.')[0];
+      }
+    }
+    
+    final desc = t['description'] ?? t['Description'] ?? 'Giao dịch';
+    final catName = t['category_name'] ?? t['CategoryName'] ?? 'Danh mục';
+    final jarName = t['jar_name'] ?? t['JarName'] ?? 'Hũ chi tiêu';
+    final imageUrl = t['receipt_image_url'] ?? t['ReceiptImageUrl'];
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        decoration: BoxDecoration(
+          color: cardBg,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40, height: 4,
+                  decoration: BoxDecoration(
+                    color: textSecondary.withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+              Center(
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF1A1840) : const Color(0xFFEEEDFF),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(_iconForCat(catName), color: accent, size: 36),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Center(
+                child: Text(desc, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: textPrimary)),
+              ),
+              const SizedBox(height: 8),
+              Center(
+                child: Text(amountStr, style: TextStyle(
+                  fontSize: 28, fontWeight: FontWeight.bold,
+                  color: isIncome ? const Color(0xFF00C096) : const Color(0xFFFF5252),
+                )),
+              ),
+              const SizedBox(height: 32),
+              
+              _detailRow('Danh mục', catName, Icons.category_outlined, textPrimary, textSecondary),
+              const Divider(height: 24),
+              _detailRow('Hũ chi tiêu', jarName, Icons.account_balance_wallet_outlined, textPrimary, textSecondary),
+              const Divider(height: 24),
+              _detailRow('Ngày giao dịch', dateStr, Icons.calendar_today_outlined, textPrimary, textSecondary),
+              const Divider(height: 24),
+              _detailRow('Giờ giao dịch', timeStr, Icons.access_time_rounded, textPrimary, textSecondary),
+              
+              if (imageUrl != null && imageUrl.toString().isNotEmpty) ...[
+                const SizedBox(height: 24),
+                Text('Ảnh hoá đơn', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: textSecondary)),
+                const SizedBox(height: 12),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: Image.network(
+                    imageUrl,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => Container(
+                      height: 150,
+                      color: isDark ? Colors.white10 : Colors.grey[200],
+                      alignment: Alignment.center,
+                      child: Text('Không tải được ảnh', style: TextStyle(color: textSecondary)),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _detailRow(String label, String value, IconData icon, Color textPrimary, Color textSecondary) {
+    return Row(
+      children: [
+        Icon(icon, size: 20, color: textSecondary),
+        const SizedBox(width: 12),
+        Text(label, style: TextStyle(fontSize: 15, color: textSecondary)),
+        const Spacer(),
+        Text(value, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: textPrimary)),
+      ],
+    );
   }
 }

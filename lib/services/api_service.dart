@@ -58,6 +58,17 @@ class ApiService {
     return null;
   }
 
+  // ── Categories ──────────────────────────────────────────────────────────
+  static Future<List<dynamic>?> getCategories({bool? isIncome}) async {
+    try {
+      String path = '/categories';
+      if (isIncome != null) path += '?is_income=$isIncome';
+      final response = await _dio.get(path);
+      if (response.statusCode == 200) return response.data;
+    } catch (e) { print('Lỗi getCategories: $e'); }
+    return null;
+  }
+
   // ── Jars (Hũ Chi Tiêu) ──────────────────────────────────────────────────
   static Future<List<dynamic>?> getJars() async {
     try {
@@ -164,6 +175,17 @@ class ApiService {
       });
       if (response.statusCode == 201) return response.data;
     } catch (e) { print('Lỗi createTransaction: $e'); }
+    return null;
+  }
+
+  static Future<Map<String, dynamic>?> uploadReceipt(String transactionId, String imagePath) async {
+    try {
+      final formData = FormData.fromMap({
+        'file': await MultipartFile.fromFile(imagePath),
+      });
+      final response = await _dio.post('/transactions/$transactionId/upload', data: formData);
+      if (response.statusCode == 200) return response.data;
+    } catch (e) { print('Lỗi uploadReceipt: $e'); }
     return null;
   }
 

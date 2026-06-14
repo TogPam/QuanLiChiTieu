@@ -85,7 +85,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         _savingRate = (dashboardData['saving_rate'] ?? 0).toDouble();
         
         final jarsList = dashboardData['jars'] as List<dynamic>? ?? [];
-        _jars = jarsList.map((e) => JarModel.fromJson(e)).toList();
+        _jars = jarsList.map((e) => JarModel.fromJson(e)).where((j) => j.jarType != 3).toList();
 
         _recentTransactions = dashboardData['recent_transactions'] as List<dynamic>? ?? [];
         _isLoading = false;
@@ -265,6 +265,25 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           if (picked != null) setS(() => receiptImage = File(picked.path));
         }
 
+        bool isLoadingCats = true;
+        List<dynamic> categories = [];
+        String? selectedCategoryId;
+
+        // Fetch categories once when dialog opens
+        if (categories.isEmpty && isLoadingCats) {
+          ApiService.getCategories(isIncome: false).then((cats) {
+            if (cats != null && cats.isNotEmpty) {
+              setS(() {
+                categories = cats;
+                selectedCategoryId = cats.first['category_id']?.toString() ?? cats.first['CategoryId']?.toString();
+                isLoadingCats = false;
+              });
+            } else {
+              setS(() => isLoadingCats = false);
+            }
+          });
+        }
+
         return Padding(
           padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
           child: Container(
@@ -307,6 +326,39 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 // Số tiền
                 _sheetField(amountCtrl, 'Số tiền (đ)', Icons.payments_outlined, isDark, textPrimary,
                     inputType: TextInputType.number),
+                const SizedBox(height: 16),
+
+                // Chọn danh mục
+                Text('Danh mục giao dịch', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: textSecondary)),
+                const SizedBox(height: 10),
+                if (isLoadingCats)
+                  const Center(child: CircularProgressIndicator())
+                else if (categories.isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF2A2940) : const Color(0xFFF5F5F9),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: selectedCategoryId,
+                        isExpanded: true,
+                        dropdownColor: isDark ? const Color(0xFF2A2940) : Colors.white,
+                        items: categories.map((c) {
+                          final cId = c['category_id']?.toString() ?? c['CategoryId']?.toString();
+                          final cName = c['category_name']?.toString() ?? c['CategoryName']?.toString();
+                          return DropdownMenuItem(
+                            value: cId,
+                            child: Text(cName ?? 'Khác', style: TextStyle(color: textPrimary)),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          if (val != null) setS(() => selectedCategoryId = val);
+                        },
+                      ),
+                    ),
+                  ),
                 const SizedBox(height: 20),
 
                 // Ảnh hóa đơn
@@ -371,12 +423,28 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                           const SnackBar(content: Text('Hãy nhập mô tả và số tiền hợp lệ'), backgroundColor: Colors.orange));
                         return;
                       }
+                      if (amount > jar.remaining) {
+                        final confirm = await showDialog<bool>(
+                          context: context,
+                          builder: (c) => AlertDialog(
+                            backgroundColor: isDark ? const Color(0xFF1E1D2E) : Colors.white,
+                            title: Text('Cảnh báo vượt hạn mức', style: TextStyle(color: textPrimary)),
+                            content: Text('Số tiền chi (${amount.toInt()}) vượt quá số dư còn lại của hũ (${jar.remaining.toInt()}). Bạn có chắc chắn muốn tiếp tục không?',
+                                style: TextStyle(color: textPrimary)),
+                            actions: [
+                              TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Hủy')),
+                              TextButton(onPressed: () => Navigator.pop(c, true), child: const Text('Tiếp tục', style: TextStyle(color: Colors.redAccent))),
+                            ],
+                          )
+                        );
+                        if (confirm != true) return;
+                      }
                       Navigator.pop(ctx);
 
                       // Tạo giao dịch Chi (isIncome = false)
                       final result = await ApiService.createTransaction(
                         jar.jarId,
-                        '1',         // category mặc định
+                        selectedCategoryId ?? '1', // category đã chọn
                         amount,
                         desc,
                         false,       // false = chi tiêu
@@ -384,6 +452,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                       );
 
                       if (result != null) {
+                        if (receiptImage != null) {
+                          await ApiService.uploadReceipt(result['transaction_id'], receiptImage!.path);
+                        }
                         await _fetchData(); // cập nhật lại spent_amount
                         if (mounted) ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
@@ -580,33 +651,38 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           opacity: _fadeAnim,
           child: SlideTransition(
             position: _slideAnim,
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
-              child: Column(
+            child: RefreshIndicator(
+              onRefresh: _fetchData,
+              color: accent,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(20),
+                child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Header
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(children: [
-                        Container(
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            boxShadow: [BoxShadow(color: accent.withValues(alpha: 0.2), blurRadius: 12, offset: const Offset(0, 4))],
-                          ),
-                          child: const CircleAvatar(radius: 24,
-                            backgroundImage: NetworkImage('https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150'),
-                          ),
+                      Container(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          boxShadow: [BoxShadow(color: accent.withValues(alpha: 0.2), blurRadius: 12, offset: const Offset(0, 4))],
                         ),
-                        const SizedBox(width: 12),
-                        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        child: const CircleAvatar(radius: 24,
+                          backgroundImage: NetworkImage('https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                           Text('Xin chào, $_userName 👋',
+                              maxLines: 1, overflow: TextOverflow.ellipsis,
                               style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: textPrimary)),
                           Text('Thứ Ba, 10 Tháng 6',
                               style: TextStyle(fontSize: 12, color: textSecondary)),
                         ]),
-                      ]),
+                      ),
+                      const SizedBox(width: 8),
                       _iconBtn(Icons.notifications_none_rounded, iconBtnBg, textPrimary),
                     ],
                   ),
@@ -719,7 +795,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           ),
         ),
       ),
-    );
+    ));
   }
 
   Widget _iconBtn(IconData icon, Color bg, Color col) => Material(
@@ -854,24 +930,24 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: isDark ? 0.18 : 0.03), blurRadius: 10, offset: const Offset(0, 3))],
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF1A1840) : const Color(0xFFEEEDFF),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, color: const Color(0xFF4B49EB), size: 20),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF1A1840) : const Color(0xFFEEEDFF),
+              shape: BoxShape.circle,
             ),
-            const SizedBox(width: 12),
-            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(title, style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: textPrimary)),
+            child: Icon(icon, color: const Color(0xFF4B49EB), size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: textPrimary)),
               const SizedBox(height: 2),
-              Text(sub, style: TextStyle(fontSize: 11, color: textSecondary)),
+              Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: textSecondary)),
             ]),
-          ]),
+          ),
+          const SizedBox(width: 8),
           Text(amount, style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold,
               color: isExpense ? const Color(0xFFFF5252) : const Color(0xFF00C096))),
         ],

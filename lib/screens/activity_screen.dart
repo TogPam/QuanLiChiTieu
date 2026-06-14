@@ -57,10 +57,11 @@ class _ActivityScreenState extends State<ActivityScreen> with SingleTickerProvid
   void dispose() { _ctrl.dispose(); _searchCtrl.dispose(); super.dispose(); }
 
   List<dynamic> get _filtered => _transactions.where((t) {
-    // Không dùng filter Category cho bây giờ vì API trả category_id, hoặc mapping
+    final catName = t['category_name'] ?? t['CategoryName'] ?? 'Khác';
+    final catOk = _selectedCategory == 'Tất cả' || catName == _selectedCategory;
     final title = (t['description'] ?? t['Description'] ?? 'Giao dịch').toString().toLowerCase();
     final searchOk = _searchText.isEmpty || title.contains(_searchText.toLowerCase());
-    return searchOk;
+    return catOk && searchOk;
   }).toList();
 
   void _showMonthPicker() {
@@ -326,7 +327,7 @@ class _ActivityScreenState extends State<ActivityScreen> with SingleTickerProvid
 
                       Navigator.pop(ctx);
                       
-                      await ApiService.createTransaction(
+                      final result = await ApiService.createTransaction(
                         selectedJarId!, 
                         1.toString(), // Default Category ID
                         double.parse(amountStr), 
@@ -334,6 +335,10 @@ class _ActivityScreenState extends State<ActivityScreen> with SingleTickerProvid
                         false, // isIncome
                         null
                       );
+                      
+                      if (result != null && selectedImage != null) {
+                        await ApiService.uploadReceipt(result['transaction_id'], selectedImage!.path);
+                      }
                       
                       _fetchData();
                       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Thêm giao dịch thành công!')));
@@ -451,17 +456,17 @@ class _ActivityScreenState extends State<ActivityScreen> with SingleTickerProvid
                 ? const Center(child: CircularProgressIndicator())
                 : _filtered.isEmpty
                     ? Center(child: Text('Không có giao dịch nào', style: TextStyle(color: textSecondary)))
-                    : ListView(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        children: _filtered.map((t) => _txCard(t, cardColor, textPrimary, textSecondary, accent, isDark)).toList(),
+                    : RefreshIndicator(
+                        onRefresh: _fetchData,
+                        color: accent,
+                        child: ListView(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          children: _filtered.map((t) => _txCard(t, cardColor, textPrimary, textSecondary, accent, isDark)).toList(),
+                        ),
                       ),
           ),
         ]),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showAddTransactionSheet,
-        backgroundColor: accent,
-        child: const Icon(Icons.add_rounded, color: Colors.white),
       ),
     );
   }
@@ -483,14 +488,16 @@ class _ActivityScreenState extends State<ActivityScreen> with SingleTickerProvid
     final desc = t['description'] ?? t['Description'] ?? 'Giao dịch';
     final catName = t['category_name'] ?? t['CategoryName'] ?? 'Danh mục';
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: cardColor, borderRadius: BorderRadius.circular(18),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03), blurRadius: 8, offset: const Offset(0, 3))],
-      ),
-      child: Row(
+    return GestureDetector(
+      onTap: () => _showTransactionDetails(t, isDark, cardColor, textPrimary, textSecondary, accent),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: cardColor, borderRadius: BorderRadius.circular(18),
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03), blurRadius: 8, offset: const Offset(0, 3))],
+        ),
+        child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(10),
@@ -512,7 +519,7 @@ class _ActivityScreenState extends State<ActivityScreen> with SingleTickerProvid
           )),
         ],
       ),
-    );
+    ));
   }
 
   IconData _iconForCat(String cat) {
@@ -524,5 +531,120 @@ class _ActivityScreenState extends State<ActivityScreen> with SingleTickerProvid
       case 'Tiền nhà': return Icons.home_rounded;
       default: return Icons.credit_card_rounded;
     }
+  }
+
+  void _showTransactionDetails(dynamic t, bool isDark, Color cardBg, Color textPrimary, Color textSecondary, Color accent) {
+    final isIncome = (t['transaction_type'] ?? t['TransactionType']) == true;
+    final amount = double.tryParse(t['amount']?.toString() ?? '0') ?? 0;
+    final amountStr = '${isIncome ? "+" : "-"}${amount.toInt().toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.')}đ';
+    
+    final rawDate = (t['transaction_date'] ?? t['TransactionDate'])?.toString() ?? '';
+    var dateStr = '';
+    var timeStr = '';
+    if (rawDate.isNotEmpty) {
+      final parts = rawDate.split('T');
+      dateStr = parts[0];
+      if (parts.length > 1) {
+        timeStr = parts[1].split('.')[0]; // Lấy HH:mm:ss
+      }
+    }
+    
+    final desc = t['description'] ?? t['Description'] ?? 'Giao dịch';
+    final catName = t['category_name'] ?? t['CategoryName'] ?? 'Danh mục';
+    final jarName = t['jar_name'] ?? t['JarName'] ?? 'Hũ chi tiêu';
+    final imageUrl = t['receipt_image_url'] ?? t['ReceiptImageUrl'];
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        decoration: BoxDecoration(
+          color: cardBg,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40, height: 4,
+                  decoration: BoxDecoration(
+                    color: textSecondary.withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+              Center(
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF1A1840) : const Color(0xFFEEEDFF),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(_iconForCat(catName), color: accent, size: 36),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Center(
+                child: Text(desc, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: textPrimary)),
+              ),
+              const SizedBox(height: 8),
+              Center(
+                child: Text(amountStr, style: TextStyle(
+                  fontSize: 28, fontWeight: FontWeight.bold,
+                  color: isIncome ? const Color(0xFF00C096) : const Color(0xFFFF5252),
+                )),
+              ),
+              const SizedBox(height: 32),
+              
+              _detailRow('Danh mục', catName, Icons.category_outlined, textPrimary, textSecondary),
+              const Divider(height: 24),
+              _detailRow('Hũ chi tiêu', jarName, Icons.account_balance_wallet_outlined, textPrimary, textSecondary),
+              const Divider(height: 24),
+              _detailRow('Ngày giao dịch', dateStr, Icons.calendar_today_outlined, textPrimary, textSecondary),
+              const Divider(height: 24),
+              _detailRow('Giờ giao dịch', timeStr, Icons.access_time_rounded, textPrimary, textSecondary),
+              
+              if (imageUrl != null && imageUrl.toString().isNotEmpty) ...[
+                const SizedBox(height: 24),
+                Text('Ảnh hoá đơn', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: textSecondary)),
+                const SizedBox(height: 12),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: Image.network(
+                    imageUrl,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => Container(
+                      height: 150,
+                      color: isDark ? Colors.white10 : Colors.grey[200],
+                      alignment: Alignment.center,
+                      child: Text('Không tải được ảnh', style: TextStyle(color: textSecondary)),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _detailRow(String label, String value, IconData icon, Color textPrimary, Color textSecondary) {
+    return Row(
+      children: [
+        Icon(icon, size: 20, color: textSecondary),
+        const SizedBox(width: 12),
+        Text(label, style: TextStyle(fontSize: 15, color: textSecondary)),
+        const Spacer(),
+        Text(value, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: textPrimary)),
+      ],
+    );
   }
 }
