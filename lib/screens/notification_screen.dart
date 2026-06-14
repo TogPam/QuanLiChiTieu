@@ -95,38 +95,40 @@ class _NotificationScreenState extends State<NotificationScreen>
             ),
         ],
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _notifications.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.notifications_off_rounded,
-                          size: 72,
-                          color: textSecondary.withValues(alpha: 0.4)),
-                      const SizedBox(height: 16),
-                      Text('Không có thông báo nào',
-                          style: TextStyle(
-                              fontSize: 16,
-                              color: textSecondary,
-                              fontWeight: FontWeight.w500)),
-                    ],
+      body: SafeArea(
+        child: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : _notifications.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.notifications_off_rounded,
+                            size: 80,
+                            color: textSecondary.withOpacity(0.3)),
+                        const SizedBox(height: 16),
+                        Text('Không có thông báo nào',
+                            style: TextStyle(
+                                fontSize: 16,
+                                color: textSecondary,
+                                fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                  )
+                : FadeTransition(
+                    opacity: _fadeAnim,
+                    child: ListView.separated(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      itemCount: _notifications.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 12),
+                      itemBuilder: (ctx, i) {
+                        final n = _notifications[i];
+                        return _buildNotifCard(
+                            n, cardColor, textPrimary, textSecondary, isDark);
+                      },
+                    ),
                   ),
-                )
-              : FadeTransition(
-                  opacity: _fadeAnim,
-                  child: ListView.separated(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _notifications.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 10),
-                    itemBuilder: (ctx, i) {
-                      final n = _notifications[i];
-                      return _buildNotifCard(
-                          n, cardColor, textPrimary, textSecondary, isDark);
-                    },
-                  ),
-                ),
+      ),
     );
   }
 
@@ -145,18 +147,18 @@ class _NotificationScreenState extends State<NotificationScreen>
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: cardColor,
-        borderRadius: BorderRadius.circular(18),
+        color: !n.isRead ? (isDark ? const Color(0xFF2A2940) : const Color(0xFFF2F4FF)) : cardColor,
+        borderRadius: BorderRadius.circular(20),
         border: !n.isRead
             ? Border.all(
-                color: const Color(0xFF4B49EB).withValues(alpha: 0.35),
-                width: 1.5)
-            : null,
+                color: const Color(0xFF4B49EB).withOpacity(0.4),
+                width: 1)
+            : Border.all(color: Colors.transparent, width: 1),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
+            color: Colors.black.withOpacity(isDark ? 0.15 : 0.04),
             blurRadius: 10,
-            offset: const Offset(0, 3),
+            offset: const Offset(0, 4),
           ),
         ],
       ),
@@ -164,46 +166,39 @@ class _NotificationScreenState extends State<NotificationScreen>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.all(12),
             decoration:
                 BoxDecoration(color: iconBg, shape: BoxShape.circle),
-            child: Icon(iconData, color: iconColor, size: 20),
+            child: Icon(iconData, color: iconColor, size: 24),
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
                       child: Text(n.title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
+                              fontWeight: !n.isRead ? FontWeight.w800 : FontWeight.w600,
+                              fontSize: 15,
                               color: textPrimary)),
                     ),
-                    if (!n.isRead)
-                      Container(
-                        width: 8,
-                        height: 8,
-                        margin: const EdgeInsets.only(left: 6, top: 3),
-                        decoration: const BoxDecoration(
-                          color: Color(0xFF4B49EB),
-                          shape: BoxShape.circle,
-                        ),
-                      ),
+                    const SizedBox(width: 8),
+                    Text(timeStr,
+                        style: TextStyle(fontSize: 12, color: textSecondary, fontWeight: !n.isRead ? FontWeight.w600 : FontWeight.normal)),
                   ],
                 ),
-                const SizedBox(height: 4),
-                Text(n.body,
-                    style: TextStyle(fontSize: 12, color: textSecondary),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis),
                 const SizedBox(height: 6),
-                Text(timeStr,
-                    style: TextStyle(fontSize: 11, color: textSecondary)),
+                Text(n.body,
+                    style: TextStyle(fontSize: 14, color: !n.isRead ? textPrimary.withOpacity(0.9) : textSecondary, height: 1.4),
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis),
               ],
             ),
           ),

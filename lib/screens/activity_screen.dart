@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -25,6 +27,8 @@ class _ActivityScreenState extends State<ActivityScreen> with SingleTickerProvid
   List<dynamic> _jars = [];
   List<dynamic> _categoriesList = [];
   bool _isLoading = true;
+  bool _isError = false;
+  Timer? _timer;
 
   final _categories = ['Tất cả', 'Ăn uống', 'Thu nhập', 'Giải trí', 'Học tập', 'Tiền nhà'];
   final _monthNames = ['Tháng 1','Tháng 2','Tháng 3','Tháng 4','Tháng 5','Tháng 6',
@@ -38,6 +42,22 @@ class _ActivityScreenState extends State<ActivityScreen> with SingleTickerProvid
     _ctrl.forward();
     _searchCtrl.addListener(() => setState(() => _searchText = _searchCtrl.text));
     _fetchData();
+    _timer = Timer.periodic(const Duration(seconds: 10), (_) => _fetchDataSilently());
+  }
+
+  Future<void> _fetchDataSilently() async {
+    final txs = await ApiService.getTransactions(month: _selectedMonth, year: _selectedYear);
+    final jarsData = await ApiService.getJars();
+    final cats = await ApiService.getCategories(isIncome: false);
+    
+    if (mounted && txs != null) {
+      setState(() {
+        _isError = false;
+        _transactions = txs;
+        _jars = jarsData ?? [];
+        _categoriesList = cats ?? [];
+      });
+    }
   }
 
   Future<void> _fetchData() async {
@@ -47,17 +67,30 @@ class _ActivityScreenState extends State<ActivityScreen> with SingleTickerProvid
     final cats = await ApiService.getCategories(isIncome: false);
     
     if (mounted) {
-      setState(() {
-        _transactions = txs ?? [];
-        _jars = jarsData ?? [];
-        _categoriesList = cats ?? [];
-        _isLoading = false;
-      });
+      if (txs != null) {
+        setState(() {
+          _isError = false;
+          _transactions = txs;
+          _jars = jarsData ?? [];
+          _categoriesList = cats ?? [];
+          _isLoading = false;
+        });
+      } else {
+        setState(() {
+          _isError = true;
+          _isLoading = false;
+        });
+      }
     }
   }
 
   @override
-  void dispose() { _ctrl.dispose(); _searchCtrl.dispose(); super.dispose(); }
+  void dispose() { 
+    _timer?.cancel();
+    _ctrl.dispose(); 
+    _searchCtrl.dispose(); 
+    super.dispose(); 
+  }
 
   List<dynamic> get _filtered => _transactions.where((t) {
     // Không dùng filter Category cho bây giờ vì API trả category_id, hoặc mapping
@@ -413,6 +446,34 @@ class _ActivityScreenState extends State<ActivityScreen> with SingleTickerProvid
     final searchBg = isDark ? const Color(0xFF1E1D2E) : const Color(0xFFF2F2F7);
     const accent = Color(0xFF4B49EB);
 
+    if (_isError) {
+      return Scaffold(
+        backgroundColor: bgColor,
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.cloud_off_rounded, size: 80, color: textSecondary.withOpacity(0.5)),
+              const SizedBox(height: 16),
+              Text('Mất kết nối máy chủ', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: textPrimary)),
+              const SizedBox(height: 8),
+              Text('Không thể lấy dữ liệu từ hệ thống', style: TextStyle(color: textSecondary)),
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                onPressed: () {
+                  setState(() { _isLoading = true; _isError = false; });
+                  _fetchData();
+                },
+                icon: const Icon(Icons.refresh_rounded, color: Colors.white),
+                label: const Text('Thử lại', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                style: ElevatedButton.styleFrom(backgroundColor: accent, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: bgColor,
       appBar: AppBar(
@@ -506,11 +567,6 @@ class _ActivityScreenState extends State<ActivityScreen> with SingleTickerProvid
           ),
         ]),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showAddTransactionSheet,
-        backgroundColor: accent,
-        child: const Icon(Icons.add_rounded, color: Colors.white),
-      ),
     );
   }
 
@@ -531,34 +587,36 @@ class _ActivityScreenState extends State<ActivityScreen> with SingleTickerProvid
     final desc = t['description'] ?? t['Description'] ?? 'Giao dịch';
     final catName = t['category_name'] ?? t['CategoryName'] ?? 'Danh mục';
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: cardColor, borderRadius: BorderRadius.circular(18),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03), blurRadius: 8, offset: const Offset(0, 3))],
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF1A1840) : const Color(0xFFEEEEFF),
-              shape: BoxShape.circle,
+    return GestureDetector(
+      onTap: () => _showTransactionDetails(t, isDark, cardColor, textPrimary, textSecondary, accent),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: cardColor, borderRadius: BorderRadius.circular(18),
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03), blurRadius: 8, offset: const Offset(0, 3))],
+        ),
+        child: Row(
+          children: [
+            _buildLeading(
+              t['receipt_image_url'] ?? t['ReceiptImageUrl'],
+              catName,
+              isIncome,
+              isDark,
+              accent,
             ),
-            child: Icon(_iconForCat(catName), color: accent, size: 20),
-          ),
-          const SizedBox(width: 12),
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(desc, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: textPrimary)),
-            const SizedBox(height: 2),
-            Text('$catName • $dateStr', style: TextStyle(color: textSecondary, fontSize: 11)),
-          ])),
-          Text(amountStr, style: TextStyle(
-            fontWeight: FontWeight.bold, fontSize: 14,
-            color: !isIncome ? const Color(0xFFFF5252) : const Color(0xFF00C096),
-          )),
-        ],
+            const SizedBox(width: 12),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(desc, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: textPrimary)),
+              const SizedBox(height: 2),
+              Text('$catName • $dateStr', style: TextStyle(color: textSecondary, fontSize: 11)),
+            ])),
+            Text(amountStr, style: TextStyle(
+              fontWeight: FontWeight.bold, fontSize: 14,
+              color: !isIncome ? const Color(0xFFFF5252) : const Color(0xFF00C096),
+            )),
+          ],
+        ),
       ),
     );
   }
@@ -572,5 +630,170 @@ class _ActivityScreenState extends State<ActivityScreen> with SingleTickerProvid
       case 'Tiền nhà': return Icons.home_rounded;
       default: return Icons.credit_card_rounded;
     }
+  }
+
+  void _showTransactionDetails(dynamic t, bool isDark, Color cardBg, Color textPrimary, Color textSecondary, Color accent) {
+    final isIncome = (t['transaction_type'] ?? t['TransactionType']) == true;
+    final amount = double.tryParse(t['amount']?.toString() ?? '0') ?? 0;
+    final amountStr = '${isIncome ? "+" : "-"}${amount.toInt().toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.')}đ';
+    
+    final rawDate = (t['transaction_date'] ?? t['TransactionDate'])?.toString() ?? '';
+    var dateStr = '';
+    var timeStr = '';
+    if (rawDate.isNotEmpty) {
+      final parts = rawDate.split('T');
+      dateStr = parts[0];
+      if (parts.length > 1) {
+        timeStr = parts[1].split('.')[0];
+      }
+    }
+    
+    final desc = t['description'] ?? t['Description'] ?? 'Giao dịch';
+    final catName = t['category_name'] ?? t['CategoryName'] ?? 'Danh mục';
+    final jarName = t['jar_name'] ?? t['JarName'] ?? 'Hũ chi tiêu';
+    final imageUrl = t['receipt_image_url'] ?? t['ReceiptImageUrl'];
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: cardBg,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(width: 40, height: 5, decoration: BoxDecoration(color: textSecondary.withOpacity(0.3), borderRadius: BorderRadius.circular(10))),
+              ),
+              const SizedBox(height: 16),
+              Center(
+                child: Text(desc, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: textPrimary)),
+              ),
+              const SizedBox(height: 8),
+              Center(
+                child: Text(amountStr, style: TextStyle(
+                  fontSize: 28, fontWeight: FontWeight.bold,
+                  color: isIncome ? const Color(0xFF00C096) : const Color(0xFFFF5252),
+                )),
+              ),
+              const SizedBox(height: 32),
+              
+              _detailRow('Danh mục', catName, Icons.category_outlined, textPrimary, textSecondary),
+              const Divider(height: 24),
+              _detailRow('Hũ chi tiêu', jarName, Icons.account_balance_wallet_outlined, textPrimary, textSecondary),
+              const Divider(height: 24),
+              _detailRow('Ngày giao dịch', dateStr, Icons.calendar_today_outlined, textPrimary, textSecondary),
+              const Divider(height: 24),
+              _detailRow('Giờ giao dịch', timeStr, Icons.access_time_rounded, textPrimary, textSecondary),
+              
+              if (imageUrl != null && imageUrl.toString().isNotEmpty) ...[
+                const SizedBox(height: 24),
+                Text('Ảnh hoá đơn', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: textSecondary)),
+                const SizedBox(height: 12),
+                GestureDetector(
+                  onTap: () => _showFullImage(imageUrl.toString()),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: Image.network(
+                      _fixImageUrl(imageUrl.toString()),
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Container(
+                        height: 150,
+                        color: isDark ? Colors.white10 : Colors.grey[200],
+                        alignment: Alignment.center,
+                        child: Text('Không tải được ảnh', style: TextStyle(color: textSecondary)),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _detailRow(String label, String value, IconData icon, Color textPrimary, Color textSecondary) {
+    return Row(
+      children: [
+        Icon(icon, size: 20, color: textSecondary),
+        const SizedBox(width: 12),
+        Text(label, style: TextStyle(fontSize: 15, color: textSecondary)),
+        const Spacer(),
+        Text(value, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: textPrimary)),
+      ],
+    );
+  }
+
+  String _fixImageUrl(String? url) {
+    if (url == null || url.isEmpty) return "";
+    return url.replaceAll('127.0.0.1', '10.0.2.2');
+  }
+
+  void _showFullImage(String imageUrl) {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(10),
+        child: GestureDetector(
+          onTap: () => Navigator.pop(ctx),
+          child: InteractiveViewer(
+            panEnabled: true,
+            boundaryMargin: const EdgeInsets.all(20),
+            minScale: 0.5,
+            maxScale: 4,
+            child: Image.network(
+              _fixImageUrl(imageUrl),
+              fit: BoxFit.contain,
+              errorBuilder: (_, __, ___) => const Center(
+                child: Text('Không tải được ảnh', style: TextStyle(color: Colors.white)),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLeading(String? imageUrl, String category, bool isIncome, bool isDark, Color accent) {
+    final fixedUrl = _fixImageUrl(imageUrl);
+    if (fixedUrl.isNotEmpty) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: CachedNetworkImage(
+          imageUrl: fixedUrl,
+          width: 46,
+          height: 46,
+          fit: BoxFit.cover,
+          placeholder: (ctx, url) =>
+              Container(width: 46, height: 46, color: isDark ? Colors.white10 : Colors.grey[200], child: const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)))),
+          errorWidget: (ctx, url, err) => _buildFallbackIcon(category, isDark, accent),
+        ),
+      );
+    }
+    return _buildFallbackIcon(category, isDark, accent);
+  }
+
+  Widget _buildFallbackIcon(String category, bool isDark, Color accent) {
+    return Container(
+      width: 46,
+      height: 46,
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1A1840) : const Color(0xFFEEEDFF),
+        shape: BoxShape.circle,
+      ),
+      child: Center(
+        child: Icon(_iconForCat(category), color: accent, size: 22),
+      ),
+    );
   }
 }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'package:flutter/services.dart';
 import '../services/api_service.dart';
 
@@ -15,6 +16,8 @@ class _VaultScreenState extends State<VaultScreen> with SingleTickerProviderStat
 
   List<dynamic> _goals = [];
   bool _isLoading = true;
+  bool _isError = false;
+  Timer? _timer;
 
   @override
   void initState() {
@@ -25,14 +28,15 @@ class _VaultScreenState extends State<VaultScreen> with SingleTickerProviderStat
         .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
     _ctrl.forward();
     _fetchData();
+    _timer = Timer.periodic(const Duration(seconds: 10), (_) => _fetchDataSilently());
   }
 
-  Future<void> _fetchData() async {
-    setState(() => _isLoading = true);
+  Future<void> _fetchDataSilently() async {
     final jars = await ApiService.getJars();
     if (jars != null && mounted) {
       setState(() {
-        _goals = jars.map((j) => {
+        _isError = false;
+        _goals = jars.where((j) => (j['jar_type'] ?? j['JarType'] ?? 0) == 3).map((j) => {
           'id': j['jar_id'] ?? j['JarId'],
           'title': j['jar_name'] ?? j['JarName'] ?? 'Mục tiêu',
           'subtitle': j['description'] ?? j['Description'] ?? 'Mục tiêu tiết kiệm',
@@ -42,13 +46,44 @@ class _VaultScreenState extends State<VaultScreen> with SingleTickerProviderStat
           'color': const Color(0xFF4B49EB),
           'icon': Icons.account_balance_wallet_rounded,
         }).toList();
-        _isLoading = false;
       });
     }
   }
 
+  Future<void> _fetchData() async {
+    setState(() => _isLoading = true);
+    final jars = await ApiService.getJars();
+    if (mounted) {
+      if (jars != null) {
+        setState(() {
+          _isError = false;
+          _goals = jars.where((j) => (j['jar_type'] ?? j['JarType'] ?? 0) == 3).map((j) => {
+            'id': j['jar_id'] ?? j['JarId'],
+            'title': j['jar_name'] ?? j['JarName'] ?? 'Mục tiêu',
+            'subtitle': j['description'] ?? j['Description'] ?? 'Mục tiêu tiết kiệm',
+            'saved': j['spent_amount'] ?? j['SpentAmount'] ?? 0,
+            'target': j['budget'] ?? j['Budget'] ?? 0,
+            'days': 30,
+            'color': const Color(0xFF4B49EB),
+            'icon': Icons.account_balance_wallet_rounded,
+          }).toList();
+          _isLoading = false;
+        });
+      } else {
+        setState(() {
+          _isError = true;
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
   @override
-  void dispose() { _ctrl.dispose(); super.dispose(); }
+  void dispose() { 
+    _timer?.cancel();
+    _ctrl.dispose(); 
+    super.dispose(); 
+  }
 
   void _showNewGoalDialog() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -187,6 +222,34 @@ class _VaultScreenState extends State<VaultScreen> with SingleTickerProviderStat
     final textSecondary = isDark ? const Color(0xFF9CA3AF) : Colors.grey;
     const accent = Color(0xFF4B49EB);
 
+    if (_isError) {
+      return Scaffold(
+        backgroundColor: bgColor,
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.cloud_off_rounded, size: 80, color: textSecondary.withOpacity(0.5)),
+              const SizedBox(height: 16),
+              Text('Mất kết nối máy chủ', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: textPrimary)),
+              const SizedBox(height: 8),
+              Text('Không thể lấy dữ liệu từ hệ thống', style: TextStyle(color: textSecondary)),
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                onPressed: () {
+                  setState(() { _isLoading = true; _isError = false; });
+                  _fetchData();
+                },
+                icon: const Icon(Icons.refresh_rounded, color: Colors.white),
+                label: const Text('Thử lại', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                style: ElevatedButton.styleFrom(backgroundColor: accent, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     final totalSaved = _goals.fold<double>(0.0, (s, g) => s + double.parse(g['saved'].toString()));
 
     return Scaffold(
@@ -278,7 +341,7 @@ class _VaultScreenState extends State<VaultScreen> with SingleTickerProviderStat
                 ),
               ]),
             ),
-            ])),
+              ]),
             ),
           ),
         ),

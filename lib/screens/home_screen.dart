@@ -3,6 +3,7 @@ import 'all_transactions_screen.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
+import 'dart:async';
 import '../models/jar_model.dart';
 import '../services/api_service.dart';
 
@@ -17,7 +18,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   late Animation<double> _fadeAnim;
   late Animation<Offset> _slideAnim;
 
-  // 1. Danh sách Hũ và Dữ liệu sẽ được load từ API
   List<JarModel> _jars = [];
   List<dynamic> _recentTransactions = [];
   List<dynamic> _categories = [];
@@ -27,8 +27,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   double _savingRate = 0;
   String _userName = 'Bạn';
   bool _isLoading = true;
+  bool _isError = false;
+  Timer? _timer;
 
-  // 2. Tách Icon và Color ra quản lý riêng ở UI (Vì Database chưa có 2 cột này)
   final Map<String, int> _jarIconMap = {'1': 0, '2': 1, '3': 2, '4': 3};
   final Map<String, int> _jarColorMap = {'1': 0, '2': 1, '3': 2, '4': 3};
 
@@ -69,6 +70,23 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOut));
     _ctrl.forward();
     _fetchData();
+    _timer = Timer.periodic(const Duration(seconds: 10), (_) => _fetchDataSilently());
+  }
+
+  Future<void> _fetchDataSilently() async {
+    final dashboardData = await ApiService.getDashboard();
+    if (mounted && dashboardData != null) {
+      setState(() {
+        _isError = false;
+        _totalBalance = (dashboardData['total_balance'] ?? 0).toDouble();
+        _totalIncome = (dashboardData['total_income'] ?? 0).toDouble();
+        _totalExpense = (dashboardData['total_expense'] ?? 0).toDouble();
+        _savingRate = (dashboardData['saving_rate'] ?? 0).toDouble();
+        final jarsList = dashboardData['jars'] as List<dynamic>? ?? [];
+        _jars = jarsList.map((e) => JarModel.fromJson(e)).where((j) => j.jarType != 3).toList();
+        _recentTransactions = dashboardData['recent_transactions'] as List<dynamic>? ?? [];
+      });
+    }
   }
 
   Future<void> _fetchData() async {
@@ -92,24 +110,30 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         _jars = jarsList.map((e) => JarModel.fromJson(e)).where((j) => j.jarType != 3).toList();
 
         _recentTransactions = dashboardData['recent_transactions'] as List<dynamic>? ?? [];
+        _isError = false;
         _isLoading = false;
       });
     } else {
-      setState(() => _isLoading = false);
+      setState(() {
+        _isError = true;
+        _isLoading = false;
+      });
     }
   }
 
   @override
-  void dispose() { _ctrl.dispose(); super.dispose(); }
+  void dispose() { 
+    _timer?.cancel();
+    _ctrl.dispose(); 
+    super.dispose(); 
+  }
 
-  // ─── Jar CRUD ──────────────────────────────────────────────────────────
   void _showAddJarDialog() => _showJarDialog(null);
   void _showEditJarDialog(JarModel jar) => _showJarDialog(jar);
 
   void _showJarDialog(JarModel? existing) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     
-    // 3. Cập nhật ánh xạ tên biến mới từ Model
     final titleCtrl = TextEditingController(text: existing?.jarName ?? '');
     final limitCtrl = TextEditingController(text: existing != null ? existing.budget.toInt().toString() : '');
     final spentCtrl = TextEditingController(text: existing != null ? existing.spentAmount.toInt().toString() : '');
@@ -218,14 +242,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                       setState(() => _isLoading = true);
                       
                       if (existing == null) {
-                        // Thêm mới qua API
-                        await ApiService.createJar(title, limit, '1'); // 1 = Personal
+                        await ApiService.createJar(title, limit, '1');
                       } else {
-                        // Cập nhật qua API
                         await ApiService.updateJar(existing.jarId, title, limit, existing.jarType.value);
                       }
                       
-                      // Load lại dữ liệu
                       await _fetchData();
                     },
                     style: ElevatedButton.styleFrom(
@@ -246,7 +267,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
-  /// Dialog CHI TIÊU: nhập mô tả + số tiền + chụp ảnh hóa đơn → tạo Transaction
   void _showSpendDialog(JarModel jar) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final descCtrl = TextEditingController();
@@ -275,7 +295,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         List<dynamic> categories = [];
         String? selectedCategoryId;
 
-        // Fetch categories once when dialog opens
         if (categories.isEmpty && isLoadingCats) {
           ApiService.getCategories(isIncome: false).then((cats) {
             if (cats != null && cats.isNotEmpty) {
@@ -313,7 +332,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                       Text(jar.jarName, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textPrimary)),
                     ]),
                   ),
-                  // Còn lại
                   Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
                     Text('Còn lại', style: TextStyle(fontSize: 11, color: textSecondary)),
                     Text(
@@ -325,11 +343,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 ]),
                 const SizedBox(height: 20),
 
-                // Mô tả
                 _sheetField(descCtrl, 'Mô tả (vd: Mua bánh mì)', Icons.edit_note_rounded, isDark, textPrimary),
                 const SizedBox(height: 14),
 
-                // Danh mục
                 Text('Danh mục', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: textSecondary)),
                 const SizedBox(height: 10),
                 SizedBox(
@@ -361,12 +377,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 ),
                 const SizedBox(height: 14),
 
-                // Số tiền
                 _sheetField(amountCtrl, 'Số tiền (đ)', Icons.payments_outlined, isDark, textPrimary,
                     inputType: TextInputType.number),
                 const SizedBox(height: 16),
 
-                // Chọn danh mục
                 Text('Danh mục giao dịch', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: textSecondary)),
                 const SizedBox(height: 10),
                 if (isLoadingCats)
@@ -399,7 +413,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   ),
                 const SizedBox(height: 20),
 
-                // Ảnh hóa đơn
                 Text('Ảnh hóa đơn (tuỳ chọn)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: textSecondary)),
                 const SizedBox(height: 10),
                 Row(children: [
@@ -447,7 +460,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 ]),
                 const SizedBox(height: 24),
 
-                // Nút xác nhận
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton.icon(
@@ -479,29 +491,20 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                       }
                       Navigator.pop(ctx);
 
-                      // Tạo giao dịch Chi (isIncome = false)
                       final result = await ApiService.createTransaction(
                         jar.jarId,
-<<<<<<< HEAD
-                        selectedCategoryId ?? '1', // category đã chọn
-=======
-                        selectedCatId ?? 1,         // category đã chọn
->>>>>>> 8641f82cec3538ed3d82f2fb93eb62547061ea6a
+                        selectedCatId ?? 1,
                         amount,
                         desc,
-                        false,       // false = chi tiêu
+                        false,
                         DateTime.now().toIso8601String(),
                       );
 
                       if (result != null) {
                         if (receiptImage != null) {
-<<<<<<< HEAD
-                          await ApiService.uploadReceipt(result['transaction_id'], receiptImage!.path);
-=======
                           await ApiService.uploadTransactionReceipt(result['transaction_id'], receiptImage!.path);
->>>>>>> 8641f82cec3538ed3d82f2fb93eb62547061ea6a
                         }
-                        await _fetchData(); // cập nhật lại spent_amount
+                        await _fetchData();
                         if (mounted) ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             content: Text('Đã ghi chi ${amount.toInt()}đ – $desc'),
