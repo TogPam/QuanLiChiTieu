@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import '../services/api_service.dart';
+import 'notification_screen.dart';
 
 class ActivityScreen extends StatefulWidget {
   const ActivityScreen({Key? key}) : super(key: key);
@@ -30,7 +31,7 @@ class _ActivityScreenState extends State<ActivityScreen> with SingleTickerProvid
   bool _isError = false;
   Timer? _timer;
 
-  final _categories = ['Tất cả', 'Ăn uống', 'Thu nhập', 'Giải trí', 'Học tập', 'Tiền nhà'];
+  List<String> _categories = ['Tất cả'];
   final _monthNames = ['Tháng 1','Tháng 2','Tháng 3','Tháng 4','Tháng 5','Tháng 6',
                        'Tháng 7','Tháng 8','Tháng 9','Tháng 10','Tháng 11','Tháng 12'];
 
@@ -56,6 +57,10 @@ class _ActivityScreenState extends State<ActivityScreen> with SingleTickerProvid
         _transactions = txs;
         _jars = jarsData ?? [];
         _categoriesList = cats ?? [];
+        if (cats != null && cats.isNotEmpty) {
+          final names = cats.map((c) => (c['category_name'] ?? c['CategoryName'] ?? '').toString()).where((n) => n.isNotEmpty).toList();
+          _categories = ['Tất cả', ...names];
+        }
       });
     }
   }
@@ -73,6 +78,10 @@ class _ActivityScreenState extends State<ActivityScreen> with SingleTickerProvid
           _transactions = txs;
           _jars = jarsData ?? [];
           _categoriesList = cats ?? [];
+          if (cats != null && cats.isNotEmpty) {
+            final names = cats.map((c) => (c['category_name'] ?? c['CategoryName'] ?? '').toString()).where((n) => n.isNotEmpty).toList();
+            _categories = ['Tất cả', ...names];
+          }
           _isLoading = false;
         });
       } else {
@@ -93,10 +102,13 @@ class _ActivityScreenState extends State<ActivityScreen> with SingleTickerProvid
   }
 
   List<dynamic> get _filtered => _transactions.where((t) {
-    // Không dùng filter Category cho bây giờ vì API trả category_id, hoặc mapping
     final title = (t['description'] ?? t['Description'] ?? 'Giao dịch').toString().toLowerCase();
     final searchOk = _searchText.isEmpty || title.contains(_searchText.toLowerCase());
-    return searchOk;
+    
+    final catName = (t['category_name'] ?? t['CategoryName'] ?? 'Khác').toString();
+    final categoryOk = _selectedCategory == 'Tất cả' || catName.toLowerCase() == _selectedCategory.toLowerCase();
+    
+    return searchOk && categoryOk;
   }).toList();
 
   void _showMonthPicker() {
@@ -480,7 +492,14 @@ class _ActivityScreenState extends State<ActivityScreen> with SingleTickerProvid
         backgroundColor: isDark ? const Color(0xFF1B1A2A) : Colors.white,
         elevation: 0,
         title: Text('Giao Dịch', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 22, color: textPrimary)),
-        actions: [IconButton(icon: Icon(Icons.notifications_none_rounded, color: textPrimary), onPressed: () {})],
+        actions: [
+          IconButton(
+            icon: Icon(Icons.notifications_none_rounded, color: textPrimary), 
+            onPressed: () {
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationScreen()));
+            }
+          )
+        ],
       ),
       body: FadeTransition(
         opacity: _fadeAnim,
@@ -735,7 +754,10 @@ class _ActivityScreenState extends State<ActivityScreen> with SingleTickerProvid
 
   String _fixImageUrl(String? url) {
     if (url == null || url.isEmpty) return "";
-    return url.replaceAll('127.0.0.1', '10.0.2.2');
+    return url.replaceAll(
+      'http://127.0.0.1:8000',
+      'https://projector-captured-locate-gain.trycloudflare.com',
+    ).replaceAll('127.0.0.1', '10.0.2.2');
   }
 
   void _showFullImage(String imageUrl) {

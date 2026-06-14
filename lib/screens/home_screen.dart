@@ -6,6 +6,7 @@ import 'dart:io';
 import 'dart:async';
 import '../models/jar_model.dart';
 import '../services/api_service.dart';
+import 'notification_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -14,6 +15,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
+  static bool _hasShownWelcome = false;
   late AnimationController _ctrl;
   late Animation<double> _fadeAnim;
   late Animation<Offset> _slideAnim;
@@ -28,6 +30,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   String _userName = 'Bạn';
   bool _isLoading = true;
   bool _isError = false;
+  bool _isPrompted = false;
   Timer? _timer;
 
   final Map<String, int> _jarIconMap = {'1': 0, '2': 1, '3': 2, '4': 3};
@@ -86,6 +89,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         _jars = jarsList.map((e) => JarModel.fromJson(e)).where((j) => j.jarType != 3).toList();
         _recentTransactions = dashboardData['recent_transactions'] as List<dynamic>? ?? [];
       });
+
+      if (_totalIncome == 0 && _totalExpense == 0 && _recentTransactions.isEmpty && _jars.isNotEmpty && !_isPrompted) {
+        _isPrompted = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) => _showInitialBalanceDialog());
+      }
     }
   }
 
@@ -93,6 +101,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     final me = await ApiService.getMe();
     if (me != null && mounted) {
       setState(() => _userName = me['full_name'] ?? 'Bạn');
+      if (!_hasShownWelcome) {
+        _hasShownWelcome = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) => _showWelcomePopup(_userName));
+      }
     }
 
     final cats = await ApiService.getCategories(isIncome: false);
@@ -113,6 +125,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         _isError = false;
         _isLoading = false;
       });
+
+      if (_totalIncome == 0 && _totalExpense == 0 && _recentTransactions.isEmpty && _jars.isNotEmpty && !_isPrompted) {
+        _isPrompted = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) => _showInitialBalanceDialog());
+      }
     } else {
       setState(() {
         _isError = true;
@@ -126,6 +143,120 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     _timer?.cancel();
     _ctrl.dispose(); 
     super.dispose(); 
+  }
+
+  void _showWelcomePopup(String name) {
+    if (!mounted) return;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(color: const Color(0xFF00C096).withOpacity(0.2), shape: BoxShape.circle),
+              child: const Icon(Icons.waving_hand_rounded, color: Color(0xFF00C096), size: 20),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Chào mừng trở lại!', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black87, fontSize: 14)),
+                  const SizedBox(height: 2),
+                  Text(name, style: TextStyle(color: isDark ? Colors.white70 : Colors.black54, fontSize: 13)),
+                ],
+              ),
+            ),
+          ],
+        ),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: isDark ? const Color(0xFF2A2940) : Colors.white,
+        elevation: 6,
+        margin: const EdgeInsets.only(bottom: 24, left: 16, right: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: isDark ? Colors.white12 : Colors.black.withOpacity(0.05), width: 1),
+        ),
+        duration: const Duration(seconds: 4),
+      )
+    );
+  }
+
+  void _showInitialBalanceDialog() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final amountCtrl = TextEditingController();
+    
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: isDark ? const Color(0xFF1E1D2E) : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: Text('Số dư đầu tháng', style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Chào tháng mới! Hãy nhập tổng số dư hiện tại của bạn để bắt đầu theo dõi nhé.', style: TextStyle(fontSize: 14, color: isDark ? Colors.white70 : Colors.black87)),
+            const SizedBox(height: 20),
+            TextField(
+              controller: amountCtrl,
+              keyboardType: TextInputType.number,
+              style: TextStyle(color: isDark ? Colors.white : Colors.black),
+              decoration: InputDecoration(
+                hintText: 'Nhập số tiền (đ)',
+                hintStyle: TextStyle(color: isDark ? Colors.white38 : Colors.black38),
+                prefixIcon: const Icon(Icons.account_balance_wallet_rounded),
+                filled: true,
+                fillColor: isDark ? const Color(0xFF2A2940) : const Color(0xFFF5F5F9),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+            },
+            child: const Text('Bỏ qua', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final amount = double.tryParse(amountCtrl.text.trim()) ?? 0;
+              if (amount > 0) {
+                Navigator.pop(ctx);
+                setState(() => _isLoading = true);
+                
+                int catId = 1;
+                if (_categories.isNotEmpty) {
+                  catId = _categories.first['category_id'] ?? 1;
+                }
+                
+                await ApiService.createTransaction(
+                  _jars.first.jarId,
+                  catId,
+                  amount,
+                  'Số dư đầu tháng',
+                  true,
+                  DateTime.now().toIso8601String(),
+                );
+                _fetchData();
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF4B49EB),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            ),
+            child: const Text('Xác nhận', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showAddJarDialog() => _showJarDialog(null);
@@ -291,24 +422,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           if (picked != null) setS(() => receiptImage = File(picked.path));
         }
 
-        bool isLoadingCats = true;
-        List<dynamic> categories = [];
-        String? selectedCategoryId;
-
-        if (categories.isEmpty && isLoadingCats) {
-          ApiService.getCategories(isIncome: false).then((cats) {
-            if (cats != null && cats.isNotEmpty) {
-              setS(() {
-                categories = cats;
-                selectedCategoryId = cats.first['category_id']?.toString() ?? cats.first['CategoryId']?.toString();
-                isLoadingCats = false;
-              });
-            } else {
-              setS(() => isLoadingCats = false);
-            }
-          });
-        }
-
         return Padding(
           padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
           child: Container(
@@ -381,37 +494,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     inputType: TextInputType.number),
                 const SizedBox(height: 16),
 
-                Text('Danh mục giao dịch', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: textSecondary)),
-                const SizedBox(height: 10),
-                if (isLoadingCats)
-                  const Center(child: CircularProgressIndicator())
-                else if (categories.isNotEmpty)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    decoration: BoxDecoration(
-                      color: isDark ? const Color(0xFF2A2940) : const Color(0xFFF5F5F9),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
-                        value: selectedCategoryId,
-                        isExpanded: true,
-                        dropdownColor: isDark ? const Color(0xFF2A2940) : Colors.white,
-                        items: categories.map((c) {
-                          final cId = c['category_id']?.toString() ?? c['CategoryId']?.toString();
-                          final cName = c['category_name']?.toString() ?? c['CategoryName']?.toString();
-                          return DropdownMenuItem(
-                            value: cId,
-                            child: Text(cName ?? 'Khác', style: TextStyle(color: textPrimary)),
-                          );
-                        }).toList(),
-                        onChanged: (val) {
-                          if (val != null) setS(() => selectedCategoryId = val);
-                        },
-                      ),
-                    ),
-                  ),
-                const SizedBox(height: 20),
 
                 Text('Ảnh hóa đơn (tuỳ chọn)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: textSecondary)),
                 const SizedBox(height: 10),
@@ -696,7 +778,40 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     return Scaffold(
       backgroundColor: bgColor,
       body: SafeArea(
-        child: FadeTransition(
+        child: _isError
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.cloud_off_rounded, size: 80, color: textSecondary.withOpacity(0.5)),
+                  const SizedBox(height: 16),
+                  Text('Mất kết nối máy chủ', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: textPrimary)),
+                  const SizedBox(height: 8),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 40),
+                    child: Text('Không thể lấy dữ liệu từ hệ thống.\nVui lòng kiểm tra kết nối và thử lại.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: textSecondary, height: 1.5)),
+                  ),
+                  const SizedBox(height: 24),
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      setState(() { _isLoading = true; _isError = false; });
+                      _fetchData();
+                    },
+                    icon: const Icon(Icons.refresh_rounded, color: Colors.white),
+                    label: const Text('Thử lại', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: accent,
+                      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      elevation: 0,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          : FadeTransition(
           opacity: _fadeAnim,
           child: SlideTransition(
             position: _slideAnim,
@@ -732,7 +847,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                         ]),
                       ),
                       const SizedBox(width: 8),
-                      _iconBtn(Icons.notifications_none_rounded, iconBtnBg, textPrimary),
+                      _iconBtn(Icons.notifications_none_rounded, iconBtnBg, textPrimary, onTap: () {
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationScreen()));
+                      }),
                     ],
                   ),
                   const SizedBox(height: 24),
@@ -847,10 +964,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     ));
   }
 
-  Widget _iconBtn(IconData icon, Color bg, Color col) => Material(
+  Widget _iconBtn(IconData icon, Color bg, Color col, {VoidCallback? onTap}) => Material(
     color: bg, shape: const CircleBorder(),
     child: InkWell(
-      onTap: () {},
+      onTap: onTap ?? () {},
       customBorder: const CircleBorder(),
       child: Padding(padding: const EdgeInsets.all(10), child: Icon(icon, size: 24, color: col)),
     ),

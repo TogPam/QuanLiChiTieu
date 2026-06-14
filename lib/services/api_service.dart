@@ -1,4 +1,7 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/material.dart';
+import '../main.dart';
+import '../screens/login_screen.dart';
 
 class ApiService {
   // Thay đổi IP này phù hợp với môi trường của bạn:
@@ -14,6 +17,70 @@ class ApiService {
   );
 
   static String? _accessToken;
+  static bool _isForceLoggingOut = false;
+
+  /// Khởi tạo interceptor – gọi 1 lần duy nhất
+  static void _ensureInterceptor() {
+    if (_dio.interceptors.whereType<_AuthInterceptor>().isNotEmpty) return;
+    _dio.interceptors.add(_AuthInterceptor());
+  }
+
+  /// Force logout khi phát hiện 401 (JWT hết hạn hoặc tài khoản đăng nhập nơi khác)
+  static void _forceLogout(String message) {
+    if (_isForceLoggingOut) return;
+    _isForceLoggingOut = true;
+    logout();
+
+    final ctx = navigatorKey.currentContext;
+    if (ctx == null) { _isForceLoggingOut = false; return; }
+
+    showDialog(
+      context: ctx,
+      barrierDismissible: false,
+      builder: (dCtx) {
+        final isDark = Theme.of(dCtx).brightness == Brightness.dark;
+        return AlertDialog(
+          backgroundColor: isDark ? const Color(0xFF1E1D2E) : Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          icon: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.redAccent.withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 36),
+          ),
+          title: Text('Phiên đăng nhập hết hạn',
+              style: TextStyle(fontWeight: FontWeight.bold,
+                  color: isDark ? const Color(0xFFE4E1EE) : const Color(0xFF1C1C1E))),
+          content: Text(message,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: isDark ? const Color(0xFF9CA3AF) : Colors.grey[600], height: 1.5)),
+          actionsAlignment: MainAxisAlignment.center,
+          actions: [
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(dCtx).pop();
+                navigatorKey.currentState?.pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (_) => const LoginScreen()),
+                  (route) => false,
+                );
+                _isForceLoggingOut = false;
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF4B49EB),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                elevation: 0,
+              ),
+              child: const Text('Đăng nhập lại', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      },
+    );
+  }
 
   // ── Auth ────────────────────────────────────────────────────────────────
   static Future<Map<String, dynamic>> register(
@@ -54,6 +121,7 @@ class ApiService {
       if (response.statusCode == 200) {
         _accessToken = response.data['access_token'];
         _dio.options.headers['Authorization'] = 'Bearer $_accessToken';
+        _ensureInterceptor();
         return {'success': true, 'user': response.data['user']};
       }
       return {'success': false, 'message': 'Lỗi không xác định'};
@@ -475,5 +543,18 @@ class ApiService {
       print('Lỗi getDashboard: $e');
     }
     return null;
+  }
+}
+
+/// Interceptor bắt lỗi 401 (JWT hết hạn / bị đăng nhập nơi khác)
+class _AuthInterceptor extends Interceptor {
+  @override
+  void onError(DioException err, ErrorInterceptorHandler handler) {
+    if (err.response?.statusCode == 401 && ApiService._accessToken != null) {
+      ApiService._forceLogout(
+        'Tài khoản của bạn đã được đăng nhập trên thiết bị khác hoặc phiên đã hết hạn.\nVui lòng đăng nhập lại.',
+      );
+    }
+    handler.next(err);
   }
 }

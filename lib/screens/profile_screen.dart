@@ -287,8 +287,6 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                   '${_savingRate > 0 ? "+" : ""}${_savingRate}%', 
                   const Color(0xFF00C096), cardColor, textPrimary, textSecondary
                 )),
-                const SizedBox(width: 14),
-                Expanded(child: _infoCard('GÓI DỊCH VỤ', 'Miễn phí', 'Vĩnh viễn', accent, cardColor, textPrimary, textSecondary)),
               ]),
               const SizedBox(height: 32),
 
@@ -307,12 +305,6 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                 ),
                 child: Column(children: [
                   _settingTile(Icons.person_rounded, 'Chỉnh sửa hồ sơ', 'Tên, email cá nhân', textPrimary, textSecondary, onTap: _showEditNameDialog),
-                  _divider(isDark),
-                  _settingTile(Icons.security_rounded, 'Bảo mật', 'Sinh trắc học, 2FA, Mật khẩu', textPrimary, textSecondary),
-                  _divider(isDark),
-                  _settingTile(Icons.notifications_rounded, 'Thông báo', 'Cảnh báo, Báo cáo hàng tuần', textPrimary, textSecondary),
-                  _divider(isDark),
-                  _settingTile(Icons.link_rounded, 'Tài khoản liên kết', '3 Ngân hàng, 2 Sàn đầu tư', textPrimary, textSecondary),
                   _divider(isDark),
 
                   // Toggle sáng/tối

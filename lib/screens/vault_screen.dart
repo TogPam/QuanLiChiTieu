@@ -57,15 +57,22 @@ class _VaultScreenState extends State<VaultScreen> with SingleTickerProviderStat
       if (jars != null) {
         setState(() {
           _isError = false;
-          _goals = jars.where((j) => (j['jar_type'] ?? j['JarType'] ?? 0) == 3).map((j) => {
-            'id': j['jar_id'] ?? j['JarId'],
-            'title': j['jar_name'] ?? j['JarName'] ?? 'Mục tiêu',
-            'subtitle': j['description'] ?? j['Description'] ?? 'Mục tiêu tiết kiệm',
-            'saved': j['spent_amount'] ?? j['SpentAmount'] ?? 0,
-            'target': j['budget'] ?? j['Budget'] ?? 0,
-            'days': 30,
-            'color': const Color(0xFF4B49EB),
-            'icon': Icons.account_balance_wallet_rounded,
+          _goals = jars.where((j) => (j['jar_type'] ?? j['JarType'] ?? 0) == 3).map((j) {
+            final descFull = (j['description'] ?? j['Description'] ?? 'Mục tiêu tiết kiệm|30').toString();
+            final descParts = descFull.split('|');
+            final subtitle = descParts[0].isEmpty ? 'Mục tiêu tiết kiệm' : descParts[0];
+            final days = descParts.length > 1 ? (int.tryParse(descParts[1]) ?? 30) : 30;
+            
+            return {
+              'id': j['jar_id'] ?? j['JarId'],
+              'title': j['jar_name'] ?? j['JarName'] ?? 'Mục tiêu',
+              'subtitle': subtitle,
+              'saved': j['spent_amount'] ?? j['SpentAmount'] ?? 0,
+              'target': j['budget'] ?? j['Budget'] ?? 0,
+              'days': days,
+              'color': const Color(0xFF4B49EB),
+              'icon': Icons.account_balance_wallet_rounded,
+            };
           }).toList();
           _isLoading = false;
         });
@@ -177,10 +184,12 @@ class _VaultScreenState extends State<VaultScreen> with SingleTickerProviderStat
                   final title = titleCtrl.text.trim();
                   if (title.isEmpty) return;
                   final target = double.tryParse(targetCtrl.text.trim()) ?? 0;
+                  final subtitle = subtitleCtrl.text.trim();
+                  final days = int.tryParse(daysCtrl.text.trim()) ?? 30;
                   Navigator.pop(ctx);
                   
                   // Gọi API tạo mục tiêu
-                  await ApiService.createJar(title, target, '1'); // 1 = Personal
+                  await ApiService.createJar(title, target, '3', description: '$subtitle|$days'); 
                   _fetchData();
                 },
                 style: ElevatedButton.styleFrom(
@@ -274,12 +283,6 @@ class _VaultScreenState extends State<VaultScreen> with SingleTickerProviderStat
             const SizedBox(height: 6),
             Row(children: [
               Text('${totalSaved.toInt().toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.')}đ', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: textPrimary)),
-              const SizedBox(width: 10),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(color: isDark ? const Color(0xFF0D3327) : const Color(0xFFE5F9F4), borderRadius: BorderRadius.circular(10)),
-                child: const Text('+12,5%', style: TextStyle(color: Color(0xFF00C096), fontSize: 12, fontWeight: FontWeight.bold)),
-              ),
             ]),
             const SizedBox(height: 24),
 
@@ -319,28 +322,6 @@ class _VaultScreenState extends State<VaultScreen> with SingleTickerProviderStat
                 child: _goalCard(g, cardColor, textPrimary, textSecondary, isDark),
               )),
 
-            // Nhận định tháng này
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF1E1D2E) : const Color(0xFFFFF5F5),
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: const Color(0xFFFF5252).withValues(alpha: 0.12)),
-              ),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Text('Nhận Định Tháng Này', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: accent)),
-                const SizedBox(height: 12),
-                Text('Bạn sắp hoàn thành Quỹ Dự Phòng vào tuần tới! Chuyển phần dư sang có thể rút ngắn 22 ngày cho mục tiêu mua xe.',
-                    style: TextStyle(color: textPrimary, height: 1.55, fontSize: 14)),
-                const SizedBox(height: 16),
-                ElevatedButton(
-                  onPressed: () {},
-                  style: ElevatedButton.styleFrom(backgroundColor: accent, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12), elevation: 0),
-                  child: const Text('Tối Ưu Tiết Kiệm', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                ),
-              ]),
-            ),
               ]),
             ),
           ),

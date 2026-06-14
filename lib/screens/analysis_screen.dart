@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
 import '../services/api_service.dart';
+import 'notification_screen.dart';
 
 class AnalysisScreen extends StatefulWidget {
   const AnalysisScreen({Key? key}) : super(key: key);
@@ -21,6 +22,7 @@ class _AnalysisScreenState extends State<AnalysisScreen>
   List<dynamic> _jars = [];
   List<dynamic> _transactions = [];
   bool _isLoading = true;
+  bool _isError = false;
 
   List<dynamic> _monthlySummaries = [];
   List<dynamic> _categoriesData = [];
@@ -52,9 +54,10 @@ class _AnalysisScreenState extends State<AnalysisScreen>
          _totalJarsCount = _jars.length;
          _transactions = db['recent_transactions'] as List<dynamic>? ?? [];
          _isLoading = false;
+         _isError = false;
       });
     } else if (mounted) {
-      setState(() => _isLoading = false);
+      setState(() { _isLoading = false; _isError = true; });
     }
   }
 
@@ -89,11 +92,36 @@ class _AnalysisScreenState extends State<AnalysisScreen>
         actions: [
           IconButton(
             icon: Icon(Icons.notifications_none_rounded, color: textPrimary),
-            onPressed: () {},
+            onPressed: () {
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationScreen()));
+            },
           ),
         ],
       ),
-      body: FadeTransition(
+      body: _isError
+        ? Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.cloud_off_rounded, size: 80, color: textSecondary.withOpacity(0.5)),
+                const SizedBox(height: 16),
+                Text('Mất kết nối máy chủ', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: textPrimary)),
+                const SizedBox(height: 8),
+                Text('Không thể lấy dữ liệu từ hệ thống', style: TextStyle(color: textSecondary)),
+                const SizedBox(height: 24),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    setState(() { _isLoading = true; _isError = false; });
+                    _fetchData();
+                  },
+                  icon: const Icon(Icons.refresh_rounded, color: Colors.white),
+                  label: const Text('Thử lại', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(backgroundColor: accent, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                ),
+              ],
+            ),
+          )
+        : FadeTransition(
         opacity: _fadeAnim,
         child: SlideTransition(
           position: _slideAnim,
