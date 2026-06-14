@@ -4,7 +4,7 @@ class ApiService {
   // Thay đổi IP này phù hợp với môi trường của bạn:
   //static const String baseUrl = 'http://10.0.2.2:8000';
   static const String baseUrl =
-      'https://grams-authorities-attempted-solaris.trycloudflare.com';
+      'https://projector-captured-locate-gain.trycloudflare.com';
   static final Dio _dio = Dio(
     BaseOptions(
       baseUrl: baseUrl,

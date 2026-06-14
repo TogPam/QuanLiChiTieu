@@ -33,11 +33,11 @@ class _AllTransactionsScreenState extends State<AllTransactionsScreen> {
     if (url == null || url.isEmpty) return "";
     // Tự động thay thế 127.0.0.1 thành IP thật
 
-    // return url.replaceAll(
-    //   'http://127.0.0.1:8000',
-    //   'https://grams-authorities-attempted-solaris.trycloudflare.com',
-    // );
-    return url.replaceAll('127.0.0.1', 'ip-may-that');
+    return url.replaceAll(
+      'http://127.0.0.1:8000',
+      'https://projector-captured-locate-gain.trycloudflare.com',
+    );
+    //return url.replaceAll('127.0.0.1', 'ip-may-that');
   }
 
   // Hàm mở ảnh Full-screen

@@ -200,7 +200,13 @@ class _VaultScreenState extends State<VaultScreen> with SingleTickerProviderStat
         opacity: _fadeAnim,
         child: SlideTransition(
           position: _slideAnim,
-          child: SingleChildScrollView(padding: const EdgeInsets.all(20), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          child: RefreshIndicator(
+            onRefresh: _fetchData,
+            color: accent,
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(20), 
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('TỔNG TIẾT KIỆM', style: TextStyle(fontSize: 11, color: textSecondary, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
             const SizedBox(height: 6),
             Row(children: [
@@ -272,7 +278,9 @@ class _VaultScreenState extends State<VaultScreen> with SingleTickerProviderStat
                 ),
               ]),
             ),
-          ])),
+            ])),
+            ),
+          ),
         ),
       ),
     );
