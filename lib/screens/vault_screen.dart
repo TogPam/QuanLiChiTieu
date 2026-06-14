@@ -32,18 +32,16 @@ class _VaultScreenState extends State<VaultScreen> with SingleTickerProviderStat
     final jars = await ApiService.getJars();
     if (jars != null && mounted) {
       setState(() {
-        _goals = jars
-            .where((j) => (j['jar_type'] ?? j['JarType']) == 3)
-            .map((j) => {
-              'id': j['jar_id'] ?? j['JarId'],
-              'title': j['jar_name'] ?? j['JarName'] ?? 'Mục tiêu',
-              'subtitle': j['description'] ?? j['Description'] ?? 'Mục tiêu tiết kiệm',
-              'saved': j['balance'] ?? j['Balance'] ?? 0,
-              'target': j['budget'] ?? j['Budget'] ?? 0,
-              'days': 30,
-              'color': const Color(0xFF4B49EB),
-              'icon': Icons.account_balance_wallet_rounded,
-            }).toList();
+        _goals = jars.map((j) => {
+          'id': j['jar_id'] ?? j['JarId'],
+          'title': j['jar_name'] ?? j['JarName'] ?? 'Mục tiêu',
+          'subtitle': j['description'] ?? j['Description'] ?? 'Mục tiêu tiết kiệm',
+          'saved': j['spent_amount'] ?? j['SpentAmount'] ?? 0,
+          'target': j['budget'] ?? j['Budget'] ?? 0,
+          'days': 30,
+          'color': const Color(0xFF4B49EB),
+          'icon': Icons.account_balance_wallet_rounded,
+        }).toList();
         _isLoading = false;
       });
     }
@@ -147,7 +145,7 @@ class _VaultScreenState extends State<VaultScreen> with SingleTickerProviderStat
                   Navigator.pop(ctx);
                   
                   // Gọi API tạo mục tiêu
-                  await ApiService.createJar(title, target, '3'); // 3 = Savings Goal
+                  await ApiService.createJar(title, target, '1'); // 1 = Personal
                   _fetchData();
                 },
                 style: ElevatedButton.styleFrom(
@@ -255,10 +253,7 @@ class _VaultScreenState extends State<VaultScreen> with SingleTickerProviderStat
             else
               ..._goals.map((g) => Padding(
                 padding: const EdgeInsets.only(bottom: 16),
-                child: GestureDetector(
-                  onTap: () => _showDepositDialog(g),
-                  child: _goalCard(g, cardColor, textPrimary, textSecondary, isDark),
-                ),
+                child: _goalCard(g, cardColor, textPrimary, textSecondary, isDark),
               )),
 
             // Nhận định tháng này
@@ -283,13 +278,12 @@ class _VaultScreenState extends State<VaultScreen> with SingleTickerProviderStat
                 ),
               ]),
             ),
-              ],
+            ])),
             ),
           ),
         ),
       ),
-    ),
-  );
+    );
   }
 
   Widget _goalCard(dynamic g, Color cardColor, Color textPrimary, Color textSecondary, bool isDark) {
@@ -358,56 +352,5 @@ class _VaultScreenState extends State<VaultScreen> with SingleTickerProviderStat
   String _formatMoneyShort(int v) {
     if (v >= 1000000) return '${(v / 1000000).toStringAsFixed(0)}Tr';
     return '${v}đ';
-  }
-
-  void _showDepositDialog(dynamic g) {
-    final amountCtrl = TextEditingController();
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textPrimary = isDark ? const Color(0xFFE4E1EE) : const Color(0xFF1C1C1E);
-    const accent = Color(0xFF4B49EB);
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: isDark ? const Color(0xFF1E1D2E) : Colors.white,
-        title: Text('Gửi tiền vào ${g['title']}', style: TextStyle(color: textPrimary)),
-        content: TextField(
-          controller: amountCtrl,
-          keyboardType: TextInputType.number,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          style: TextStyle(color: textPrimary),
-          decoration: InputDecoration(
-            hintText: 'Nhập số tiền (đ)',
-            hintStyle: TextStyle(color: isDark ? Colors.white38 : Colors.grey[400]),
-            prefixIcon: const Icon(Icons.savings_outlined),
-            filled: true,
-            fillColor: isDark ? const Color(0xFF2A2940) : const Color(0xFFF5F5F9),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Huỷ', style: TextStyle(color: Colors.grey))),
-          ElevatedButton(
-            onPressed: () async {
-              final amount = double.tryParse(amountCtrl.text.trim()) ?? 0;
-              if (amount > 0) {
-                Navigator.pop(ctx);
-                await ApiService.createTransaction(
-                  g['id'],
-                  '1', // Category mặc định hoặc Thu nhập
-                  amount,
-                  'Gửi tiền vào tiết kiệm',
-                  true, // True = Thu nhập (Deposit)
-                  DateTime.now().toIso8601String(),
-                );
-                _fetchData();
-              }
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: accent, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-            child: const Text('Gửi tiền', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
   }
 }
