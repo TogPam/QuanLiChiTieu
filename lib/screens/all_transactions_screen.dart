@@ -1,5 +1,5 @@
-// screens/all_transactions_screen.dart
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart'; // Cài gói này để cache ảnh
 import '../services/api_service.dart';
 
 class AllTransactionsScreen extends StatefulWidget {
@@ -9,51 +9,21 @@ class AllTransactionsScreen extends StatefulWidget {
   State<AllTransactionsScreen> createState() => _AllTransactionsScreenState();
 }
 
-class _AllTransactionsScreenState extends State<AllTransactionsScreen>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _ctrl;
-  late Animation<double> _fadeAnim;
-  String _selectedCategory = 'Tất cả';
-  final TextEditingController _searchCtrl = TextEditingController();
-  String _searchText = '';
-
-  List<dynamic> _allTransactions = [];
+class _AllTransactionsScreenState extends State<AllTransactionsScreen> {
+  List<dynamic> _transactions = [];
   bool _isLoading = true;
-
-  final _categories = ['Tất cả', 'Ăn uống', 'Thu nhập', 'Giải trí', 'Học tập', 'Tiền nhà', 'Di chuyển', 'Tiện ích'];
-
-  List<dynamic> get _filtered {
-    return _allTransactions.where((t) {
-      final catOk = _selectedCategory == 'Tất cả' || t['category'] == _selectedCategory;
-      final searchOk = _searchText.isEmpty ||
-          (t['title'] as String).toLowerCase().contains(_searchText.toLowerCase());
-      return catOk && searchOk;
-    }).toList();
-  }
-
-  Map<String, List<dynamic>> get _grouped {
-    final map = <String, List<dynamic>>{};
-    for (final t in _filtered) {
-      (map[t['date']] ??= []).add(t);
-    }
-    return map;
-  }
 
   @override
   void initState() {
     super.initState();
-    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 400));
-    _fadeAnim = CurvedAnimation(parent: _ctrl, curve: Curves.easeOut);
-    _ctrl.forward();
-    _searchCtrl.addListener(() => setState(() => _searchText = _searchCtrl.text));
-    _fetchData();
+    _loadData();
   }
 
-  Future<void> _fetchData() async {
-    setState(() => _isLoading = true);
-    final data = await ApiService.getTransactions(limit: 500);
-    if (data != null && mounted) {
+  Future<void> _loadData() async {
+    final data = await ApiService.getTransactions();
+    if (mounted) {
       setState(() {
+<<<<<<< HEAD
         _allTransactions = data.map((t) {
            final isExpense = (t['transaction_type'] ?? t['TransactionType']) == false;
            final amt = double.parse((t['amount'] ?? t['Amount'] ?? 0).toString()).toInt();
@@ -75,18 +45,26 @@ class _AllTransactionsScreenState extends State<AllTransactionsScreen>
              'raw': t,
            };
         }).toList();
+=======
+        _transactions = data ?? [];
+>>>>>>> 8641f82cec3538ed3d82f2fb93eb62547061ea6a
         _isLoading = false;
       });
     }
   }
 
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    _searchCtrl.dispose();
-    super.dispose();
+  String _fixImageUrl(String? url) {
+    if (url == null || url.isEmpty) return "";
+    // Tự động thay thế 127.0.0.1 thành IP thật
+
+    // return url.replaceAll(
+    //   'http://127.0.0.1:8000',
+    //   'https://grams-authorities-attempted-solaris.trycloudflare.com',
+    // );
+    return url.replaceAll('127.0.0.1', 'ip-may-that');
   }
 
+<<<<<<< HEAD
   String _formatAmount(int amount) {
     final abs = amount.abs();
     final sign = amount < 0 ? '-' : '+';
@@ -317,35 +295,132 @@ class _AllTransactionsScreenState extends State<AllTransactionsScreen>
                   ),
             ),
           ],
+=======
+  // Hàm mở ảnh Full-screen
+  void _showFullImage(String imageUrl) {
+    final fixedUrl = _fixImageUrl(imageUrl);
+    print("🔍 Mở ảnh Full-screen: $fixedUrl");
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => Scaffold(
+          backgroundColor: Colors.black,
+          appBar: AppBar(
+            backgroundColor: Colors.black,
+            iconTheme: const IconThemeData(color: Colors.white),
+          ),
+          body: InteractiveViewer(
+            // Cho phép zoom ảnh
+            minScale: 0.5,
+            maxScale: 4.0,
+            child: Center(child: CachedNetworkImage(imageUrl: fixedUrl)),
+          ),
+>>>>>>> 8641f82cec3538ed3d82f2fb93eb62547061ea6a
         ),
       ),
     );
   }
 
-  Widget _summaryChip(String label, String value, Color valueColor, {Color? textSecondary}) {
-    return Column(
-      children: [
-        Text(value,
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: valueColor)),
-        const SizedBox(height: 2),
-        Text(label,
-            style: TextStyle(
-                fontSize: 11, color: textSecondary ?? const Color(0xFF9CA3AF))),
-      ],
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8F9FB),
+      appBar: AppBar(
+        title: const Text(
+          'Lịch sử giao dịch',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black,
+        elevation: 0.5,
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : ListView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              itemCount: _transactions.length,
+              itemBuilder: (context, index) {
+                final t = _transactions[index];
+                final isIncome = t['transaction_type'] == true;
+                final imageUrl = t['receipt_image_url'] as String?;
+
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.03),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+
+                    // Thumbnail ảnh
+                    leading: _buildLeading(imageUrl, isIncome),
+                    title: Text(
+                      t['description'] ?? 'Không mô tả',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    subtitle: Text(
+                      t['transaction_date'] ?? '',
+                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                    ),
+                    trailing: Text(
+                      '${isIncome ? '+' : '-'} ${t['amount']}',
+                      style: TextStyle(
+                        color: isIncome ? Colors.green : Colors.red,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    onTap: imageUrl != null && imageUrl.isNotEmpty
+                        ? () => _showFullImage(imageUrl)
+                        : null,
+                  ),
+                );
+              },
+            ),
     );
   }
 
-  IconData _iconForCat(String cat) {
-    switch (cat) {
-      case 'Ăn uống': return Icons.restaurant_rounded;
-      case 'Thu nhập': return Icons.payments_rounded;
-      case 'Giải trí': return Icons.celebration_rounded;
-      case 'Học tập': return Icons.school_rounded;
-      case 'Tiền nhà': return Icons.home_rounded;
-      case 'Di chuyển': return Icons.directions_car_rounded;
-      case 'Tiện ích': return Icons.bolt_rounded;
-      default: return Icons.credit_card_rounded;
+  // Widget hiển thị ảnh nhỏ hoặc icon
+  Widget _buildLeading(String? imageUrl, bool isIncome) {
+    final fixedUrl = _fixImageUrl(imageUrl);
+    if (fixedUrl != null && fixedUrl.isNotEmpty) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: CachedNetworkImage(
+          imageUrl: fixedUrl,
+          width: 50,
+          height: 50,
+          fit: BoxFit.cover,
+          placeholder: (ctx, url) =>
+              const CircularProgressIndicator(strokeWidth: 2),
+        ),
+      );
     }
+    // Nếu không có ảnh, hiện icon mặc định
+    return Container(
+      width: 50,
+      height: 50,
+      decoration: BoxDecoration(
+        color: isIncome
+            ? Colors.green.withOpacity(0.1)
+            : Colors.red.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Icon(
+        isIncome ? Icons.arrow_downward : Icons.arrow_upward,
+        color: isIncome ? Colors.green : Colors.red,
+      ),
+    );
   }
 
   void _showTransactionDetails(dynamic t, bool isDark, Color cardBg, Color textPrimary, Color textSecondary, Color accent) {

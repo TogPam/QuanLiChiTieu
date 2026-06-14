@@ -22,6 +22,10 @@ class _AnalysisScreenState extends State<AnalysisScreen>
   List<dynamic> _transactions = [];
   bool _isLoading = true;
 
+  List<dynamic> _jars = [];
+  List<dynamic> _monthlySummaries = [];
+  List<dynamic> _categoriesData = [];
+
   @override
   void initState() {
     super.initState();
@@ -37,14 +41,46 @@ class _AnalysisScreenState extends State<AnalysisScreen>
   Future<void> _fetchData() async {
     setState(() => _isLoading = true);
     final db = await ApiService.getDashboard();
-    if (db != null && mounted) {
+    final summaries = await ApiService.getMonthlySummary(DateTime.now().year);
+    final txs = await ApiService.getTransactions(month: DateTime.now().month, year: DateTime.now().year, limit: 500);
+
+    if (mounted) {
       setState(() {
+<<<<<<< HEAD
          _savingRate = (db['saving_rate'] ?? 0).toDouble();
          _totalExpense = (db['total_expense'] ?? 0).toDouble();
          final jarsList = db['jars'] as List<dynamic>? ?? [];
          _jars = jarsList.where((j) => (j['jar_type'] ?? j['JarType']) != 3).toList();
          _totalJarsCount = _jars.length;
          _transactions = db['recent_transactions'] as List<dynamic>? ?? [];
+=======
+         if (db != null) {
+           _savingRate = (db['saving_rate'] ?? 0).toDouble();
+           _totalExpense = (db['total_expense'] ?? 0).toDouble();
+           _jars = db['jars'] as List<dynamic>? ?? [];
+           _totalJarsCount = _jars.length;
+         }
+         _monthlySummaries = summaries ?? [];
+
+         // Group transactions by category
+         if (txs != null) {
+           final Map<String, Map<String, dynamic>> catMap = {};
+           for (var t in txs) {
+             final isIncome = t['transaction_type'] == true || t['TransactionType'] == true;
+             if (isIncome) continue; // Only expense
+             final catName = t['category_name'] ?? t['CategoryName'] ?? 'Khác';
+             final amount = double.tryParse(t['amount']?.toString() ?? '0') ?? 0;
+             if (!catMap.containsKey(catName)) {
+               catMap[catName] = {'name': catName, 'amount': 0.0, 'count': 0};
+             }
+             catMap[catName]!['amount'] += amount;
+             catMap[catName]!['count'] += 1;
+           }
+           _categoriesData = catMap.values.toList();
+           _categoriesData.sort((a, b) => b['amount'].compareTo(a['amount']));
+         }
+
+>>>>>>> 8641f82cec3538ed3d82f2fb93eb62547061ea6a
          _isLoading = false;
       });
     }
@@ -142,16 +178,24 @@ class _AnalysisScreenState extends State<AnalysisScreen>
                             height: 160,
                             width: 160,
                             child: CustomPaint(
+<<<<<<< HEAD
                               painter: DonutChartPainter(
                                 isDark: isDark,
                                 values: _jars.isNotEmpty ? _jars.map((j) => double.parse(j['budget'].toString())).toList() : [1.0],
                               ),
+=======
+                              painter: DonutChartPainter(isDark: isDark, jars: _jars),
+>>>>>>> 8641f82cec3538ed3d82f2fb93eb62547061ea6a
                               child: Center(
                                 child: Column(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
                                     Text(
+<<<<<<< HEAD
                                       _jars.isEmpty ? '0' : '${_jars.fold<double>(0, (s, j) => s + double.parse(j['budget'].toString())).toInt().toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.')}',
+=======
+                                      '$_totalJarsCount',
+>>>>>>> 8641f82cec3538ed3d82f2fb93eb62547061ea6a
                                       style: TextStyle(
                                           fontSize: 16,
                                           fontWeight: FontWeight.bold,
@@ -172,6 +216,7 @@ class _AnalysisScreenState extends State<AnalysisScreen>
                         ],
                       ),
                       const SizedBox(height: 24),
+<<<<<<< HEAD
                       if (_jars.isNotEmpty)
                         GridView.count(
                           crossAxisCount: 2,
@@ -198,6 +243,26 @@ class _AnalysisScreenState extends State<AnalysisScreen>
                         )
                       else
                         Center(child: Text('Chưa có hũ chi tiêu nào', style: TextStyle(color: textSecondary))),
+=======
+                      GridView.count(
+                        crossAxisCount: 2,
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        childAspectRatio: 3.5,
+                        children: _jars.isEmpty ? [
+                          _buildLegendItem(color: const Color(0xFF4B49EB), label: 'Chưa có dữ liệu', textSecondary: textSecondary)
+                        ] : _jars.take(4).toList().asMap().entries.map((e) {
+                          final idx = e.key;
+                          final j = e.value;
+                          final total = _jars.fold(0.0, (s, x) => s + (x['budget'] ?? x['TargetAmount'] ?? 0));
+                          final budget = (j['budget'] ?? j['TargetAmount'] ?? 0).toDouble();
+                          final pct = total > 0 ? (budget / total * 100).toInt() : 0;
+                          final name = j['jar_name'] ?? j['JarName'] ?? '';
+                          final colors = [const Color(0xFF4B49EB), const Color(0xFF00C096), const Color(0xFFE63946), const Color(0xFF457B9D)];
+                          return _buildLegendItem(color: colors[idx % colors.length], label: '$name ($pct%)', textSecondary: textSecondary);
+                        }).toList(),
+                      ),
+>>>>>>> 8641f82cec3538ed3d82f2fb93eb62547061ea6a
                     ],
                   ),
                 ),
@@ -340,13 +405,19 @@ class _AnalysisScreenState extends State<AnalysisScreen>
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                           crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
+                          children: _monthlySummaries.isEmpty ? [
                             _buildBarGroup('T6', 0.8, 0.4, isDark),
                             _buildBarGroup('T5', 0.5, 0.6, isDark),
                             _buildBarGroup('T4', 0.7, 0.3, isDark),
                             _buildBarGroup('T3', 0.6, 0.5, isDark),
                             _buildBarGroup('T2', 0.9, 0.2, isDark),
-                          ],
+                          ] : _monthlySummaries.take(6).toList().reversed.map((s) {
+                             final inc = (s['total_income'] ?? 0).toDouble();
+                             final exp = (s['total_expense'] ?? 0).toDouble();
+                             final m = s['month'];
+                             final maxVal = math.max(1.0, math.max(inc, exp) * 1.2);
+                             return _buildBarGroup('T$m', inc / maxVal, exp / maxVal, isDark);
+                           }).toList(),
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -376,6 +447,7 @@ class _AnalysisScreenState extends State<AnalysisScreen>
                         fontWeight: FontWeight.bold,
                         color: textPrimary)),
                 const SizedBox(height: 12),
+<<<<<<< HEAD
                 Builder(builder: (ctx) {
                   if (_transactions.isEmpty) return Center(child: Text('Chưa có giao dịch nào', style: TextStyle(color: textSecondary)));
                   
@@ -416,6 +488,25 @@ class _AnalysisScreenState extends State<AnalysisScreen>
                     }).toList(),
                   );
                 }),
+=======
+                if (_categoriesData.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 20),
+                    child: Text('Không có dữ liệu chi tiêu tháng này', style: TextStyle(color: textSecondary)),
+                  )
+                else
+                  ..._categoriesData.map((c) {
+                    final idx = _categoriesData.indexOf(c);
+                    final name = c['name'];
+                    final count = c['count'];
+                    final amount = c['amount'];
+                    final colors = [const Color(0xFF4B49EB), const Color(0xFFFF5252), const Color(0xFF00C096), const Color(0xFFFFAB00), const Color(0xFFB5179E)];
+                    final col = colors[idx % colors.length];
+                    final totalExp = math.max(1.0, _totalExpense);
+                    return _buildCategoryRow(name, '$count giao dịch', '${amount.toInt().toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.')}đ',
+                      col, amount / totalExp, cardColor, textPrimary, textSecondary, isDark);
+                  }).toList(),
+>>>>>>> 8641f82cec3538ed3d82f2fb93eb62547061ea6a
               ],
             ),
           ),
@@ -628,8 +719,13 @@ class _AnalysisScreenState extends State<AnalysisScreen>
 // ── Custom Painter – Biểu đồ Donut ───────────────────────────────────────
 class DonutChartPainter extends CustomPainter {
   final bool isDark;
+<<<<<<< HEAD
   final List<double> values;
   const DonutChartPainter({required this.isDark, this.values = const [1.0]});
+=======
+  final List<dynamic> jars;
+  const DonutChartPainter({required this.isDark, required this.jars});
+>>>>>>> 8641f82cec3538ed3d82f2fb93eb62547061ea6a
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -648,10 +744,15 @@ class DonutChartPainter extends CustomPainter {
 
     final rect =
         Rect.fromCircle(center: center, radius: radius - strokeWidth / 2);
+<<<<<<< HEAD
         
     final total = values.fold<double>(0, (s, v) => s + v);
     final normalizedValues = total > 0 ? values.map((v) => v / total).toList() : [1.0];
 
+=======
+    final total = jars.fold(0.0, (s, x) => s + (x['budget'] ?? x['TargetAmount'] ?? 0));
+    final values = jars.isEmpty ? [1.0] : jars.map((j) => total > 0 ? (j['budget'] ?? j['TargetAmount'] ?? 0) / total : 0.0).toList();
+>>>>>>> 8641f82cec3538ed3d82f2fb93eb62547061ea6a
     final colors = [
       const Color(0xFF4B49EB), const Color(0xFF00C096),
       const Color(0xFFE63946), const Color(0xFF457B9D),
@@ -662,7 +763,7 @@ class DonutChartPainter extends CustomPainter {
     for (int i = 0; i < normalizedValues.length; i++) {
       final sweepAngle = normalizedValues[i] * 2 * math.pi;
       final paintArc = Paint()
-        ..color = colors[i]
+        ..color = colors[i % colors.length]
         ..strokeWidth = strokeWidth
         ..style = PaintingStyle.stroke
         ..strokeCap = StrokeCap.round;

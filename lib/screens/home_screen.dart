@@ -20,6 +20,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   // 1. Danh sách Hũ và Dữ liệu sẽ được load từ API
   List<JarModel> _jars = [];
   List<dynamic> _recentTransactions = [];
+  List<dynamic> _categories = [];
   double _totalBalance = 0;
   double _totalIncome = 0;
   double _totalExpense = 0;
@@ -76,9 +77,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       setState(() => _userName = me['full_name'] ?? 'Bạn');
     }
 
+    final cats = await ApiService.getCategories(isIncome: false);
+
     final dashboardData = await ApiService.getDashboard();
     if (mounted && dashboardData != null) {
       setState(() {
+        if (cats != null) _categories = cats;
         _totalBalance = (dashboardData['total_balance'] ?? 0).toDouble();
         _totalIncome = (dashboardData['total_income'] ?? 0).toDouble();
         _totalExpense = (dashboardData['total_expense'] ?? 0).toDouble();
@@ -248,6 +252,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     final descCtrl = TextEditingController();
     final amountCtrl = TextEditingController();
     File? receiptImage;
+    int? selectedCatId;
+    if (_categories.isNotEmpty) selectedCatId = _categories.first['category_id'] as int;
     const accent = Color(0xFF4B49EB);
 
     showModalBottomSheet(
@@ -321,6 +327,38 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
                 // Mô tả
                 _sheetField(descCtrl, 'Mô tả (vd: Mua bánh mì)', Icons.edit_note_rounded, isDark, textPrimary),
+                const SizedBox(height: 14),
+
+                // Danh mục
+                Text('Danh mục', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: textSecondary)),
+                const SizedBox(height: 10),
+                SizedBox(
+                  height: 40,
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: _categories.length,
+                    itemBuilder: (_, i) {
+                      final cat = _categories[i];
+                      final catId = cat['category_id'] as int;
+                      final catName = cat['category_name'] as String;
+                      final isSelected = selectedCatId == catId;
+                      return GestureDetector(
+                        onTap: () => setS(() => selectedCatId = catId),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          margin: const EdgeInsets.only(right: 10),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: isSelected ? accent : (isDark ? const Color(0xFF2A2940) : const Color(0xFFF2F2F7)),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          alignment: Alignment.center,
+                          child: Text(catName, style: TextStyle(fontWeight: FontWeight.w600, color: isSelected ? Colors.white : textSecondary, fontSize: 13)),
+                        ),
+                      );
+                    },
+                  ),
+                ),
                 const SizedBox(height: 14),
 
                 // Số tiền
@@ -444,7 +482,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                       // Tạo giao dịch Chi (isIncome = false)
                       final result = await ApiService.createTransaction(
                         jar.jarId,
+<<<<<<< HEAD
                         selectedCategoryId ?? '1', // category đã chọn
+=======
+                        selectedCatId ?? 1,         // category đã chọn
+>>>>>>> 8641f82cec3538ed3d82f2fb93eb62547061ea6a
                         amount,
                         desc,
                         false,       // false = chi tiêu
@@ -453,7 +495,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
                       if (result != null) {
                         if (receiptImage != null) {
+<<<<<<< HEAD
                           await ApiService.uploadReceipt(result['transaction_id'], receiptImage!.path);
+=======
+                          await ApiService.uploadTransactionReceipt(result['transaction_id'], receiptImage!.path);
+>>>>>>> 8641f82cec3538ed3d82f2fb93eb62547061ea6a
                         }
                         await _fetchData(); // cập nhật lại spent_amount
                         if (mounted) ScaffoldMessenger.of(context).showSnackBar(
