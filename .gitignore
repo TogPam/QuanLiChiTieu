@@ -46,7 +46,7 @@ app.*.map.json
 
 .env
 
-pubspec.yaml
+pubspec.lock
 
 # Cache
 .pytest_cache/
@@ -55,6 +55,3 @@ pubspec.yaml
 
 # Jupyter
 .ipynb_checkpoints/
-
-FrontEnd/build/
-FrontEnd/.dart_tool/
